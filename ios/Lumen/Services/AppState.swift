@@ -65,10 +65,11 @@ final class AppState {
         let defaults = UserDefaults.standard
         if let data = defaults.data(forKey: Keys.config),
            let saved = try? JSONDecoder().decode(AppConfig.self, from: data) {
-            config = saved
-            if !config.providers.contains(where: { $0.type == .tmdb }) {
-                config.providers.insert(.tmdb, at: 0)
+            var migrated = saved
+            if !migrated.providers.contains(where: { $0.type == .tmdb }) {
+                migrated.providers.insert(.tmdb, at: 0)
             }
+            config = migrated
         } else {
             config = .default
         }
