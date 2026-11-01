@@ -31,7 +31,7 @@ jobs:
         working-directory: ios
         env:
           CONFIG_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/config/app-config.json
-          AUTH_URL: ${{ vars.AUTH_SERVER_URL }}
+          AUTH_URL: ${{ vars.AUTH_SERVER_URL || (secrets.SUPABASE_PROJECT_REF && format('https://{0}.supabase.co/functions/v1/lumen-auth', secrets.SUPABASE_PROJECT_REF)) || '' }}
         run: |
           set -o pipefail
           xcodebuild \
