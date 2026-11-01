@@ -1,0 +1,69 @@
+name: Build iOS (IPA non firmata)
+
+on:
+  push:
+    branches: [main]
+    paths: ["ios/**", ".github/workflows/ios-build.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Seleziona Xcode 26 (necessario per Liquid Glass)
+        run: |
+          XC="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | grep -v -i beta | sort -V | tail -1)"
+          if [ -z "$XC" ]; then XC="$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"; fi
+          echo "Uso $XC"
+          sudo xcode-select -s "$XC"
+          xcodebuild -version
+
+      - name: Genera il progetto Xcode
+        working-directory: ios
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Compila (senza firma)
+        working-directory: ios
+        env:
+          CONFIG_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/config/app-config.json
+          AUTH_URL: ${{ vars.AUTH_SERVER_URL }}
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Lumen.xcodeproj \
+            -scheme Lumen \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            REMOTE_CONFIG_URL="$CONFIG_URL" \
+            AUTH_SERVER_URL="$AUTH_URL" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build | tee build.log | grep -E "error:|warning: unre|BUILD" || true
+          test -d build/Build/Products/Release-iphoneos/Lumen.app
+
+      - name: Crea IPA
+        working-directory: ios
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/Lumen.app Payload/
+          zip -qry Lumen-unsigned.ipa Payload
+          ls -lh Lumen-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lumen-unsigned-ipa
+          path: ios/Lumen-unsigned.ipa
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: build-log
+          path: ios/build.log
