@@ -1,8 +1,0 @@
-.DS_Store
-ios/*.xcodeproj
-ios/build/
-build/
-*.ipa
-xcuserdata/
-DerivedData/
-__pycache__/
