@@ -45,8 +45,21 @@ jobs:
             AUTH_SERVER_URL="$AUTH_URL" \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            build | tee build.log | grep -E "error:|warning: unre|BUILD" || true
-          test -d build/Build/Products/Release-iphoneos/Lumen.app
+            build > build.log 2>&1 || STATUS=$?
+          # Mostra gli errori di compilazione direttamente nel riepilogo della build
+          if grep -E "error:" build.log > errors.txt; then
+            echo "## Errori di compilazione" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            sort -u errors.txt | head -60 >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            sort -u errors.txt | head -60
+          fi
+          tail -5 build.log
+          APP=build/Build/Products/Release-iphoneos/Lumen.app
+          if [ "${STATUS:-0}" != "0" ] || [ ! -f "$APP/Lumen" ]; then
+            echo "::error::Compilazione fallita: l'app non contiene l'eseguibile. Vedi gli errori sopra o l'artefatto build-log."
+            exit 1
+          fi
 
       - name: Crea IPA
         working-directory: ios
