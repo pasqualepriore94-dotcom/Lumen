@@ -1,0 +1,1211 @@
+{
+ "home": {
+  "hero": {
+   "id": "sintel",
+   "title": "Sintel",
+   "kind": "movie",
+   "year": 2010,
+   "tags": [
+    "Fantasy",
+    "Avventura",
+    "Emozionante"
+   ],
+   "poster": "bundle://hero-sintel",
+   "backdrop": "bundle://backdrop-sintel",
+   "overview": "Una giovane guerriera attraversa terre ostili per ritrovare il cucciolo di drago che aveva salvato e cresciuto.",
+   "rating": "13+"
+  },
+  "sections": [
+   {
+    "id": "nuovi",
+    "title": "Altri titoli da guardare",
+    "style": "poster",
+    "items": [
+     {
+      "id": "openmovies",
+      "title": "Open Movie Collection",
+      "kind": "series",
+      "year": 2024,
+      "tags": [
+       "Antologia",
+       "Animazione",
+       "Creativa"
+      ],
+      "poster": "bundle://poster-openmovies",
+      "backdrop": "bundle://backdrop-openmovies",
+      "overview": "I cortometraggi aperti più celebri, raccolti in una serie: dietro ogni episodio un mondo diverso.",
+      "badge": "Nuova stagione",
+      "rating": "13+"
+     },
+     {
+      "id": "tears",
+      "title": "Tears of Steel",
+      "kind": "movie",
+      "year": 2012,
+      "tags": [
+       "Fantascienza",
+       "Azione"
+      ],
+      "poster": "bundle://poster-tears",
+      "backdrop": "bundle://backdrop-tears",
+      "overview": "Ad Amsterdam, un gruppo di scienziati tenta di salvare il mondo da robot ostili ricreando un momento del passato.",
+      "badge": "Aggiunto di recente",
+      "rating": "13+"
+     },
+     {
+      "id": "shorts",
+      "title": "Brevi Grandi Schermi",
+      "kind": "series",
+      "year": 2023,
+      "tags": [
+       "Brevi",
+       "Leggero",
+       "Divertente"
+      ],
+      "poster": "bundle://poster-shorts",
+      "backdrop": "bundle://backdrop-shorts",
+      "overview": "Cinque mini episodi da quindici secondi: fuoco, fughe, risate, strade e disastri in cucina.",
+      "badge": "Nuovi episodi",
+      "rating": "T"
+     },
+     {
+      "id": "bbb",
+      "title": "Big Buck Bunny",
+      "kind": "movie",
+      "year": 2008,
+      "tags": [
+       "Animazione",
+       "Commedia",
+       "Per tutti"
+      ],
+      "poster": "bundle://poster-bbb",
+      "backdrop": "bundle://backdrop-bbb",
+      "overview": "Un coniglio gigante e pacifico decide che è ora di dare una lezione ai tre roditori che tormentano il bosco.",
+      "rating": "T"
+     },
+     {
+      "id": "garage-bullrun",
+      "title": "Verso il Bullrun",
+      "kind": "movie",
+      "year": 2019,
+      "tags": [
+       "Documentario",
+       "Viaggio",
+       "Motori"
+      ],
+      "poster": "bundle://poster-garage-bullrun",
+      "backdrop": "bundle://backdrop-garage-bullrun",
+      "overview": "Il racconto della preparazione e della partenza per un raduno su strada lungo tutto il Paese.",
+      "badge": "Aggiunto di recente",
+      "rating": "T"
+     },
+     {
+      "id": "elephants",
+      "title": "Elephants Dream",
+      "kind": "movie",
+      "year": 2006,
+      "tags": [
+       "Fantascienza",
+       "Surreale",
+       "Cupo"
+      ],
+      "poster": "bundle://poster-elephants",
+      "backdrop": "bundle://backdrop-elephants",
+      "overview": "Due personaggi esplorano una macchina infinita e misteriosa, dove nulla è come sembra.",
+      "rating": "13+"
+     }
+    ]
+   },
+   {
+    "id": "top10",
+    "title": "La Top 10 di oggi",
+    "style": "top10",
+    "items": [
+     {
+      "id": "sintel",
+      "title": "Sintel",
+      "kind": "movie",
+      "year": 2010,
+      "tags": [
+       "Fantasy",
+       "Avventura",
+       "Emozionante"
+      ],
+      "poster": "bundle://poster-sintel",
+      "backdrop": "bundle://backdrop-sintel",
+      "overview": "Una giovane guerriera attraversa terre ostili per ritrovare il cucciolo di drago che aveva salvato e cresciuto.",
+      "rating": "13+",
+      "rank": 1
+     },
+     {
+      "id": "openmovies",
+      "title": "Open Movie Collection",
+      "kind": "series",
+      "year": 2024,
+      "tags": [
+       "Antologia",
+       "Animazione",
+       "Creativa"
+      ],
+      "poster": "bundle://poster-openmovies",
+      "backdrop": "bundle://backdrop-openmovies",
+      "overview": "I cortometraggi aperti più celebri, raccolti in una serie: dietro ogni episodio un mondo diverso.",
+      "badge": "Nuova stagione",
+      "rating": "13+",
+      "rank": 2
+     },
+     {
+      "id": "tears",
+      "title": "Tears of Steel",
+      "kind": "movie",
+      "year": 2012,
+      "tags": [
+       "Fantascienza",
+       "Azione"
+      ],
+      "poster": "bundle://poster-tears",
+      "backdrop": "bundle://backdrop-tears",
+      "overview": "Ad Amsterdam, un gruppo di scienziati tenta di salvare il mondo da robot ostili ricreando un momento del passato.",
+      "badge": "Aggiunto di recente",
+      "rating": "13+",
+      "rank": 3
+     },
+     {
+      "id": "bbb",
+      "title": "Big Buck Bunny",
+      "kind": "movie",
+      "year": 2008,
+      "tags": [
+       "Animazione",
+       "Commedia",
+       "Per tutti"
+      ],
+      "poster": "bundle://poster-bbb",
+      "backdrop": "bundle://backdrop-bbb",
+      "overview": "Un coniglio gigante e pacifico decide che è ora di dare una lezione ai tre roditori che tormentano il bosco.",
+      "rating": "T",
+      "rank": 4
+     },
+     {
+      "id": "shorts",
+      "title": "Brevi Grandi Schermi",
+      "kind": "series",
+      "year": 2023,
+      "tags": [
+       "Brevi",
+       "Leggero",
+       "Divertente"
+      ],
+      "poster": "bundle://poster-shorts",
+      "backdrop": "bundle://backdrop-shorts",
+      "overview": "Cinque mini episodi da quindici secondi: fuoco, fughe, risate, strade e disastri in cucina.",
+      "badge": "Nuovi episodi",
+      "rating": "T",
+      "rank": 5
+     },
+     {
+      "id": "elephants",
+      "title": "Elephants Dream",
+      "kind": "movie",
+      "year": 2006,
+      "tags": [
+       "Fantascienza",
+       "Surreale",
+       "Cupo"
+      ],
+      "poster": "bundle://poster-elephants",
+      "backdrop": "bundle://backdrop-elephants",
+      "overview": "Due personaggi esplorano una macchina infinita e misteriosa, dove nulla è come sembra.",
+      "rating": "13+",
+      "rank": 6
+     },
+     {
+      "id": "garage-bullrun",
+      "title": "Verso il Bullrun",
+      "kind": "movie",
+      "year": 2019,
+      "tags": [
+       "Documentario",
+       "Viaggio",
+       "Motori"
+      ],
+      "poster": "bundle://poster-garage-bullrun",
+      "backdrop": "bundle://backdrop-garage-bullrun",
+      "overview": "Il racconto della preparazione e della partenza per un raduno su strada lungo tutto il Paese.",
+      "badge": "Aggiunto di recente",
+      "rating": "T",
+      "rank": 7
+     },
+     {
+      "id": "garage-gti",
+      "title": "La compatta sportiva",
+      "kind": "movie",
+      "year": 2019,
+      "tags": [
+       "Documentario",
+       "Motori"
+      ],
+      "poster": "bundle://poster-garage-gti",
+      "backdrop": "bundle://backdrop-garage-gti",
+      "overview": "Una prova completa di una piccola sportiva: motore, guida, abitacolo e prezzo.",
+      "rating": "T",
+      "rank": 8
+     },
+     {
+      "id": "garage-grand",
+      "title": "Auto con mille dollari",
+      "kind": "movie",
+      "year": 2019,
+      "tags": [
+       "Documentario",
+       "Motori",
+       "Ironico"
+      ],
+      "poster": "bundle://poster-garage-grand",
+      "backdrop": "bundle://backdrop-garage-grand",
+      "overview": "Che auto si riesce davvero a comprare con soli mille dollari? Una sfida tra annunci e officina.",
+      "rating": "T",
+      "rank": 9
+     },
+     {
+      "id": "garage-subaru",
+      "title": "Fuoristrada, istruzioni per l'uso",
+      "kind": "movie",
+      "year": 2019,
+      "tags": [
+       "Documentario",
+       "Motori"
+      ],
+      "poster": "bundle://poster-garage-subaru",
+      "backdrop": "bundle://backdrop-garage-subaru",
+      "overview": "Una prova su strada e su sterrato per capire come si comporta una station wagon fuori dall'asfalto.",
+      "rating": "T",
+      "rank": 10
+     }
+    ]
+   },
+   {
+    "id": "animazione",
+    "title": "Animazione e fantasy",
+    "style": "poster",
+    "items": [
+     {
+      "id": "sintel",
+      "title": "Sintel",
+      "kind": "movie",
+      "year": 2010,
+      "tags": [
+       "Fantasy",
+       "Avventura",
+       "Emozionante"
+      ],
+      "poster": "bundle://poster-sintel",
+      "backdrop": "bundle://backdrop-sintel",
+      "overview": "Una giovane guerriera attraversa terre ostili per ritrovare il cucciolo di drago che aveva salvato e cresciuto.",
+      "rating": "13+"
+     },
+     {
+      "id": "bbb",
+      "title": "Big Buck Bunny",
+      "kind": "movie",
+      "year": 2008,
+      "tags": [
+       "Animazione",
+       "Commedia",
+       "Per tutti"
+      ],
+      "poster": "bundle://poster-bbb",
+      "backdrop": "bundle://backdrop-bbb",
+      "overview": "Un coniglio gigante e pacifico decide che è ora di dare una lezione ai tre roditori che tormentano il bosco.",
+      "rating": "T"
+     },
+     {
+      "id": "elephants",
+      "title": "Elephants Dream",
+      "kind": "movie",
+      "year": 2006,
+      "tags": [
+       "Fantascienza",
+       "Surreale",
+       "Cupo"
+      ],
+      "poster": "bundle://poster-elephants",
+      "backdrop": "bundle://backdrop-elephants",
+      "overview": "Due personaggi esplorano una macchina infinita e misteriosa, dove nulla è come sembra.",
+      "rating": "13+"
+     },
+     {
+      "id": "openmovies",
+      "title": "Open Movie Collection",
+      "kind": "series",
+      "year": 2024,
+      "tags": [
+       "Antologia",
+       "Animazione",
+       "Creativa"
+      ],
+      "poster": "bundle://poster-openmovies",
+      "backdrop": "bundle://backdrop-openmovies",
+      "overview": "I cortometraggi aperti più celebri, raccolti in una serie: dietro ogni episodio un mondo diverso.",
+      "badge": "Nuova stagione",
+      "rating": "13+"
+     },
+     {
+      "id": "shorts",
+      "title": "Brevi Grandi Schermi",
+      "kind": "series",
+      "year": 2023,
+      "tags": [
+       "Brevi",
+       "Leggero",
+       "Divertente"
+      ],
+      "poster": "bundle://poster-shorts",
+      "backdrop": "bundle://backdrop-shorts",
+      "overview": "Cinque mini episodi da quindici secondi: fuoco, fughe, risate, strade e disastri in cucina.",
+      "badge": "Nuovi episodi",
+      "rating": "T"
+     }
+    ]
+   },
+   {
+    "id": "esclusivi",
+    "title": "Solo su Lumen",
+    "style": "large",
+    "items": [
+     {
+      "id": "openmovies",
+      "title": "Open Movie Collection",
+      "kind": "series",
+      "year": 2024,
+      "tags": [
+       "Antologia",
+       "Animazione",
+       "Creativa"
+      ],
+      "poster": "bundle://poster-openmovies",
+      "backdrop": "bundle://backdrop-openmovies",
+      "overview": "I cortometraggi aperti più celebri, raccolti in una serie: dietro ogni episodio un mondo diverso.",
+      "badge": "Nuova stagione",
+      "rating": "13+"
+     },
+     {
+      "id": "tears",
+      "title": "Tears of Steel",
+      "kind": "movie",
+      "year": 2012,
+      "tags": [
+       "Fantascienza",
+       "Azione"
+      ],
+      "poster": "bundle://poster-tears",
+      "backdrop": "bundle://backdrop-tears",
+      "overview": "Ad Amsterdam, un gruppo di scienziati tenta di salvare il mondo da robot ostili ricreando un momento del passato.",
+      "badge": "Aggiunto di recente",
+      "rating": "13+"
+     },
+     {
+      "id": "shorts",
+      "title": "Brevi Grandi Schermi",
+      "kind": "series",
+      "year": 2023,
+      "tags": [
+       "Brevi",
+       "Leggero",
+       "Divertente"
+      ],
+      "poster": "bundle://poster-shorts",
+      "backdrop": "bundle://backdrop-shorts",
+      "overview": "Cinque mini episodi da quindici secondi: fuoco, fughe, risate, strade e disastri in cucina.",
+      "badge": "Nuovi episodi",
+      "rating": "T"
+     },
+     {
+      "id": "sintel",
+      "title": "Sintel",
+      "kind": "movie",
+      "year": 2010,
+      "tags": [
+       "Fantasy",
+       "Avventura",
+       "Emozionante"
+      ],
+      "poster": "bundle://poster-sintel",
+      "backdrop": "bundle://backdrop-sintel",
+      "overview": "Una giovane guerriera attraversa terre ostili per ritrovare il cucciolo di drago che aveva salvato e cresciuto.",
+      "rating": "13+"
+     }
+    ]
+   },
+   {
+    "id": "motori",
+    "title": "Documentari a motori",
+    "style": "wide",
+    "items": [
+     {
+      "id": "garage-bullrun",
+      "title": "Verso il Bullrun",
+      "kind": "movie",
+      "year": 2019,
+      "tags": [
+       "Documentario",
+       "Viaggio",
+       "Motori"
+      ],
+      "poster": "bundle://poster-garage-bullrun",
+      "backdrop": "bundle://backdrop-garage-bullrun",
+      "overview": "Il racconto della preparazione e della partenza per un raduno su strada lungo tutto il Paese.",
+      "badge": "Aggiunto di recente",
+      "rating": "T"
+     },
+     {
+      "id": "garage-gti",
+      "title": "La compatta sportiva",
+      "kind": "movie",
+      "year": 2019,
+      "tags": [
+       "Documentario",
+       "Motori"
+      ],
+      "poster": "bundle://poster-garage-gti",
+      "backdrop": "bundle://backdrop-garage-gti",
+      "overview": "Una prova completa di una piccola sportiva: motore, guida, abitacolo e prezzo.",
+      "rating": "T"
+     },
+     {
+      "id": "garage-grand",
+      "title": "Auto con mille dollari",
+      "kind": "movie",
+      "year": 2019,
+      "tags": [
+       "Documentario",
+       "Motori",
+       "Ironico"
+      ],
+      "poster": "bundle://poster-garage-grand",
+      "backdrop": "bundle://backdrop-garage-grand",
+      "overview": "Che auto si riesce davvero a comprare con soli mille dollari? Una sfida tra annunci e officina.",
+      "rating": "T"
+     },
+     {
+      "id": "garage-subaru",
+      "title": "Fuoristrada, istruzioni per l'uso",
+      "kind": "movie",
+      "year": 2019,
+      "tags": [
+       "Documentario",
+       "Motori"
+      ],
+      "poster": "bundle://poster-garage-subaru",
+      "backdrop": "bundle://backdrop-garage-subaru",
+      "overview": "Una prova su strada e su sterrato per capire come si comporta una station wagon fuori dall'asfalto.",
+      "rating": "T"
+     }
+    ]
+   },
+   {
+    "id": "scifi",
+    "title": "Fantascienza e mondi possibili",
+    "style": "poster",
+    "items": [
+     {
+      "id": "tears",
+      "title": "Tears of Steel",
+      "kind": "movie",
+      "year": 2012,
+      "tags": [
+       "Fantascienza",
+       "Azione"
+      ],
+      "poster": "bundle://poster-tears",
+      "backdrop": "bundle://backdrop-tears",
+      "overview": "Ad Amsterdam, un gruppo di scienziati tenta di salvare il mondo da robot ostili ricreando un momento del passato.",
+      "badge": "Aggiunto di recente",
+      "rating": "13+"
+     },
+     {
+      "id": "elephants",
+      "title": "Elephants Dream",
+      "kind": "movie",
+      "year": 2006,
+      "tags": [
+       "Fantascienza",
+       "Surreale",
+       "Cupo"
+      ],
+      "poster": "bundle://poster-elephants",
+      "backdrop": "bundle://backdrop-elephants",
+      "overview": "Due personaggi esplorano una macchina infinita e misteriosa, dove nulla è come sembra.",
+      "rating": "13+"
+     },
+     {
+      "id": "hls-test",
+      "title": "Segnale di prova HLS",
+      "kind": "movie",
+      "year": 2026,
+      "tags": [
+       "Test tecnico",
+       "Streaming adattivo"
+      ],
+      "poster": "bundle://poster-hls-test",
+      "backdrop": "bundle://backdrop-hls-test",
+      "overview": "Flusso di test Apple con più qualità: utile per verificare che il player passi da una risoluzione all'altra."
+     },
+     {
+      "id": "sintel",
+      "title": "Sintel",
+      "kind": "movie",
+      "year": 2010,
+      "tags": [
+       "Fantasy",
+       "Avventura",
+       "Emozionante"
+      ],
+      "poster": "bundle://poster-sintel",
+      "backdrop": "bundle://backdrop-sintel",
+      "overview": "Una giovane guerriera attraversa terre ostili per ritrovare il cucciolo di drago che aveva salvato e cresciuto.",
+      "rating": "13+"
+     },
+     {
+      "id": "openmovies",
+      "title": "Open Movie Collection",
+      "kind": "series",
+      "year": 2024,
+      "tags": [
+       "Antologia",
+       "Animazione",
+       "Creativa"
+      ],
+      "poster": "bundle://poster-openmovies",
+      "backdrop": "bundle://backdrop-openmovies",
+      "overview": "I cortometraggi aperti più celebri, raccolti in una serie: dietro ogni episodio un mondo diverso.",
+      "badge": "Nuova stagione",
+      "rating": "13+"
+     }
+    ]
+   },
+   {
+    "id": "test",
+    "title": "Per sviluppatori: test dello streaming",
+    "style": "wide",
+    "items": [
+     {
+      "id": "hls-test",
+      "title": "Segnale di prova HLS",
+      "kind": "movie",
+      "year": 2026,
+      "tags": [
+       "Test tecnico",
+       "Streaming adattivo"
+      ],
+      "poster": "bundle://poster-hls-test",
+      "backdrop": "bundle://backdrop-hls-test",
+      "overview": "Flusso di test Apple con più qualità: utile per verificare che il player passi da una risoluzione all'altra."
+     },
+     {
+      "id": "bbb",
+      "title": "Big Buck Bunny",
+      "kind": "movie",
+      "year": 2008,
+      "tags": [
+       "Animazione",
+       "Commedia",
+       "Per tutti"
+      ],
+      "poster": "bundle://poster-bbb",
+      "backdrop": "bundle://backdrop-bbb",
+      "overview": "Un coniglio gigante e pacifico decide che è ora di dare una lezione ai tre roditori che tormentano il bosco.",
+      "rating": "T"
+     },
+     {
+      "id": "tears",
+      "title": "Tears of Steel",
+      "kind": "movie",
+      "year": 2012,
+      "tags": [
+       "Fantascienza",
+       "Azione"
+      ],
+      "poster": "bundle://poster-tears",
+      "backdrop": "bundle://backdrop-tears",
+      "overview": "Ad Amsterdam, un gruppo di scienziati tenta di salvare il mondo da robot ostili ricreando un momento del passato.",
+      "badge": "Aggiunto di recente",
+      "rating": "13+"
+     }
+    ]
+   }
+  ]
+ },
+ "details": {
+  "sintel": {
+   "item": {
+    "id": "sintel",
+    "title": "Sintel",
+    "kind": "movie",
+    "year": 2010,
+    "tags": [
+     "Fantasy",
+     "Avventura",
+     "Emozionante"
+    ],
+    "poster": "bundle://poster-sintel",
+    "backdrop": "bundle://backdrop-sintel",
+    "overview": "Una giovane guerriera attraversa terre ostili per ritrovare il cucciolo di drago che aveva salvato e cresciuto.",
+    "rating": "13+"
+   },
+   "duration": 888,
+   "cast": [
+    "Blender Foundation"
+   ]
+  },
+  "bbb": {
+   "item": {
+    "id": "bbb",
+    "title": "Big Buck Bunny",
+    "kind": "movie",
+    "year": 2008,
+    "tags": [
+     "Animazione",
+     "Commedia",
+     "Per tutti"
+    ],
+    "poster": "bundle://poster-bbb",
+    "backdrop": "bundle://backdrop-bbb",
+    "overview": "Un coniglio gigante e pacifico decide che è ora di dare una lezione ai tre roditori che tormentano il bosco.",
+    "rating": "T"
+   },
+   "duration": 596,
+   "cast": [
+    "Blender Foundation"
+   ]
+  },
+  "tears": {
+   "item": {
+    "id": "tears",
+    "title": "Tears of Steel",
+    "kind": "movie",
+    "year": 2012,
+    "tags": [
+     "Fantascienza",
+     "Azione"
+    ],
+    "poster": "bundle://poster-tears",
+    "backdrop": "bundle://backdrop-tears",
+    "overview": "Ad Amsterdam, un gruppo di scienziati tenta di salvare il mondo da robot ostili ricreando un momento del passato.",
+    "badge": "Aggiunto di recente",
+    "rating": "13+"
+   },
+   "duration": 734,
+   "cast": [
+    "Blender Foundation"
+   ]
+  },
+  "elephants": {
+   "item": {
+    "id": "elephants",
+    "title": "Elephants Dream",
+    "kind": "movie",
+    "year": 2006,
+    "tags": [
+     "Fantascienza",
+     "Surreale",
+     "Cupo"
+    ],
+    "poster": "bundle://poster-elephants",
+    "backdrop": "bundle://backdrop-elephants",
+    "overview": "Due personaggi esplorano una macchina infinita e misteriosa, dove nulla è come sembra.",
+    "rating": "13+"
+   },
+   "duration": 653,
+   "cast": [
+    "Blender Foundation"
+   ]
+  },
+  "garage-subaru": {
+   "item": {
+    "id": "garage-subaru",
+    "title": "Fuoristrada, istruzioni per l'uso",
+    "kind": "movie",
+    "year": 2019,
+    "tags": [
+     "Documentario",
+     "Motori"
+    ],
+    "poster": "bundle://poster-garage-subaru",
+    "backdrop": "bundle://backdrop-garage-subaru",
+    "overview": "Una prova su strada e su sterrato per capire come si comporta una station wagon fuori dall'asfalto.",
+    "rating": "T"
+   },
+   "duration": 594,
+   "cast": []
+  },
+  "garage-gti": {
+   "item": {
+    "id": "garage-gti",
+    "title": "La compatta sportiva",
+    "kind": "movie",
+    "year": 2019,
+    "tags": [
+     "Documentario",
+     "Motori"
+    ],
+    "poster": "bundle://poster-garage-gti",
+    "backdrop": "bundle://backdrop-garage-gti",
+    "overview": "Una prova completa di una piccola sportiva: motore, guida, abitacolo e prezzo.",
+    "rating": "T"
+   },
+   "duration": 287,
+   "cast": []
+  },
+  "garage-bullrun": {
+   "item": {
+    "id": "garage-bullrun",
+    "title": "Verso il Bullrun",
+    "kind": "movie",
+    "year": 2019,
+    "tags": [
+     "Documentario",
+     "Viaggio",
+     "Motori"
+    ],
+    "poster": "bundle://poster-garage-bullrun",
+    "backdrop": "bundle://backdrop-garage-bullrun",
+    "overview": "Il racconto della preparazione e della partenza per un raduno su strada lungo tutto il Paese.",
+    "badge": "Aggiunto di recente",
+    "rating": "T"
+   },
+   "duration": 47,
+   "cast": []
+  },
+  "garage-grand": {
+   "item": {
+    "id": "garage-grand",
+    "title": "Auto con mille dollari",
+    "kind": "movie",
+    "year": 2019,
+    "tags": [
+     "Documentario",
+     "Motori",
+     "Ironico"
+    ],
+    "poster": "bundle://poster-garage-grand",
+    "backdrop": "bundle://backdrop-garage-grand",
+    "overview": "Che auto si riesce davvero a comprare con soli mille dollari? Una sfida tra annunci e officina.",
+    "rating": "T"
+   },
+   "duration": 181,
+   "cast": []
+  },
+  "hls-test": {
+   "item": {
+    "id": "hls-test",
+    "title": "Segnale di prova HLS",
+    "kind": "movie",
+    "year": 2026,
+    "tags": [
+     "Test tecnico",
+     "Streaming adattivo"
+    ],
+    "poster": "bundle://poster-hls-test",
+    "backdrop": "bundle://backdrop-hls-test",
+    "overview": "Flusso di test Apple con più qualità: utile per verificare che il player passi da una risoluzione all'altra."
+   },
+   "duration": 1800,
+   "cast": []
+  },
+  "openmovies": {
+   "item": {
+    "id": "openmovies",
+    "title": "Open Movie Collection",
+    "kind": "series",
+    "year": 2024,
+    "tags": [
+     "Antologia",
+     "Animazione",
+     "Creativa"
+    ],
+    "poster": "bundle://poster-openmovies",
+    "backdrop": "bundle://backdrop-openmovies",
+    "overview": "I cortometraggi aperti più celebri, raccolti in una serie: dietro ogni episodio un mondo diverso.",
+    "badge": "Nuova stagione",
+    "rating": "13+"
+   },
+   "cast": [
+    "Blender Foundation",
+    "Blender Studio"
+   ],
+   "seasons": [
+    {
+     "id": "om-s1",
+     "number": 1,
+     "episodes": [
+      {
+       "id": "om-1-1",
+       "number": 1,
+       "title": "Il sogno dell'elefante",
+       "overview": "Una macchina infinita e due esploratori che non la vedono allo stesso modo.",
+       "duration": 653,
+       "still": "bundle://backdrop-elephants"
+      },
+      {
+       "id": "om-1-2",
+       "number": 2,
+       "title": "Il coniglio gigante",
+       "overview": "La vendetta più gentile del bosco.",
+       "duration": 596,
+       "still": "bundle://backdrop-bbb"
+      }
+     ]
+    },
+    {
+     "id": "om-s2",
+     "number": 2,
+     "episodes": [
+      {
+       "id": "om-2-1",
+       "number": 1,
+       "title": "La ragazza e il drago",
+       "overview": "Un viaggio lungo una vita per ritrovare un amico.",
+       "duration": 888,
+       "still": "bundle://backdrop-sintel"
+      },
+      {
+       "id": "om-2-2",
+       "number": 2,
+       "title": "Lacrime d'acciaio",
+       "overview": "Robot, Amsterdam e una seconda possibilità.",
+       "duration": 734,
+       "still": "bundle://backdrop-tears"
+      }
+     ]
+    }
+   ]
+  },
+  "shorts": {
+   "item": {
+    "id": "shorts",
+    "title": "Brevi Grandi Schermi",
+    "kind": "series",
+    "year": 2023,
+    "tags": [
+     "Brevi",
+     "Leggero",
+     "Divertente"
+    ],
+    "poster": "bundle://poster-shorts",
+    "backdrop": "bundle://backdrop-shorts",
+    "overview": "Cinque mini episodi da quindici secondi: fuoco, fughe, risate, strade e disastri in cucina.",
+    "badge": "Nuovi episodi",
+    "rating": "T"
+   },
+   "cast": [],
+   "seasons": [
+    {
+     "id": "sh-s1",
+     "number": 1,
+     "episodes": [
+      {
+       "id": "sh-1",
+       "number": 1,
+       "title": "Fiamme",
+       "overview": "Quindici secondi di fuoco.",
+       "duration": 15,
+       "still": "bundle://backdrop-shorts"
+      },
+      {
+       "id": "sh-2",
+       "number": 2,
+       "title": "Fughe",
+       "overview": "Una fuga in pieno stile action.",
+       "duration": 15,
+       "still": "bundle://backdrop-shorts"
+      },
+      {
+       "id": "sh-3",
+       "number": 3,
+       "title": "Risate",
+       "overview": "Il divertimento in formato tascabile.",
+       "duration": 60,
+       "still": "bundle://backdrop-shorts"
+      },
+      {
+       "id": "sh-4",
+       "number": 4,
+       "title": "In strada",
+       "overview": "Un giro in auto, senza fretta.",
+       "duration": 15,
+       "still": "bundle://backdrop-shorts"
+      },
+      {
+       "id": "sh-5",
+       "number": 5,
+       "title": "Disastri",
+       "overview": "Quando in cucina qualcosa va storto.",
+       "duration": 15,
+       "still": "bundle://backdrop-shorts"
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "streams": {
+  "sintel": [
+   {
+    "url": "https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8",
+    "quality": "Auto"
+   },
+   {
+    "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
+    "quality": "MP4"
+   }
+  ],
+  "bbb": [
+   {
+    "url": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+    "quality": "Auto"
+   },
+   {
+    "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+    "quality": "MP4"
+   }
+  ],
+  "tears": [
+   {
+    "url": "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8",
+    "quality": "Auto"
+   },
+   {
+    "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+    "quality": "MP4"
+   }
+  ],
+  "elephants": [
+   {
+    "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+    "quality": "Auto"
+   }
+  ],
+  "garage-subaru": [
+   {
+    "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4",
+    "quality": "Auto"
+   }
+  ],
+  "garage-gti": [
+   {
+    "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4",
+    "quality": "Auto"
+   }
+  ],
+  "garage-bullrun": [
+   {
+    "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4",
+    "quality": "Auto"
+   }
+  ],
+  "garage-grand": [
+   {
+    "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WhatCarCanYouGetForAGrand.mp4",
+    "quality": "Auto"
+   }
+  ],
+  "hls-test": [
+   {
+    "url": "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8",
+    "quality": "Auto"
+   }
+  ],
+  "om-1-1": [
+   {
+    "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+    "quality": "Auto"
+   }
+  ],
+  "om-1-2": [
+   {
+    "url": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+    "quality": "Auto"
+   }
+  ],
+  "om-2-1": [
+   {
+    "url": "https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8",
+    "quality": "Auto"
+   }
+  ],
+  "om-2-2": [
+   {
+    "url": "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8",
+    "quality": "Auto"
+   }
+  ],
+  "sh-1": [
+   {
+    "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    "quality": "Auto"
+   }
+  ],
+  "sh-2": [
+   {
+    "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+    "quality": "Auto"
+   }
+  ],
+  "sh-3": [
+   {
+    "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+    "quality": "Auto"
+   }
+  ],
+  "sh-4": [
+   {
+    "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4",
+    "quality": "Auto"
+   }
+  ],
+  "sh-5": [
+   {
+    "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4",
+    "quality": "Auto"
+   }
+  ]
+ },
+ "clips": [
+  {
+   "id": "c1",
+   "item": {
+    "id": "shorts",
+    "title": "Brevi Grandi Schermi: Fiamme",
+    "kind": "series",
+    "year": 2023,
+    "tags": [
+     "Brevi",
+     "Leggero",
+     "Divertente"
+    ],
+    "poster": "bundle://poster-shorts",
+    "backdrop": "bundle://backdrop-shorts",
+    "overview": "Cinque mini episodi da quindici secondi: fuoco, fughe, risate, strade e disastri in cucina.",
+    "badge": "Nuovi episodi",
+    "rating": "T"
+   },
+   "video": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
+  },
+  {
+   "id": "c2",
+   "item": {
+    "id": "bbb",
+    "title": "Big Buck Bunny",
+    "kind": "movie",
+    "year": 2008,
+    "tags": [
+     "Animazione",
+     "Commedia",
+     "Per tutti"
+    ],
+    "poster": "bundle://poster-bbb",
+    "backdrop": "bundle://backdrop-bbb",
+    "overview": "Un coniglio gigante e pacifico decide che è ora di dare una lezione ai tre roditori che tormentano il bosco.",
+    "rating": "T"
+   },
+   "video": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+  },
+  {
+   "id": "c3",
+   "item": {
+    "id": "shorts",
+    "title": "Brevi Grandi Schermi: Fughe",
+    "kind": "series",
+    "year": 2023,
+    "tags": [
+     "Brevi",
+     "Leggero",
+     "Divertente"
+    ],
+    "poster": "bundle://poster-shorts",
+    "backdrop": "bundle://backdrop-shorts",
+    "overview": "Cinque mini episodi da quindici secondi: fuoco, fughe, risate, strade e disastri in cucina.",
+    "badge": "Nuovi episodi",
+    "rating": "T"
+   },
+   "video": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
+  },
+  {
+   "id": "c4",
+   "item": {
+    "id": "sintel",
+    "title": "Sintel",
+    "kind": "movie",
+    "year": 2010,
+    "tags": [
+     "Fantasy",
+     "Avventura",
+     "Emozionante"
+    ],
+    "poster": "bundle://poster-sintel",
+    "backdrop": "bundle://backdrop-sintel",
+    "overview": "Una giovane guerriera attraversa terre ostili per ritrovare il cucciolo di drago che aveva salvato e cresciuto.",
+    "rating": "13+"
+   },
+   "video": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4"
+  },
+  {
+   "id": "c5",
+   "item": {
+    "id": "shorts",
+    "title": "Brevi Grandi Schermi: Risate",
+    "kind": "series",
+    "year": 2023,
+    "tags": [
+     "Brevi",
+     "Leggero",
+     "Divertente"
+    ],
+    "poster": "bundle://poster-shorts",
+    "backdrop": "bundle://backdrop-shorts",
+    "overview": "Cinque mini episodi da quindici secondi: fuoco, fughe, risate, strade e disastri in cucina.",
+    "badge": "Nuovi episodi",
+    "rating": "T"
+   },
+   "video": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4"
+  },
+  {
+   "id": "c6",
+   "item": {
+    "id": "tears",
+    "title": "Tears of Steel",
+    "kind": "movie",
+    "year": 2012,
+    "tags": [
+     "Fantascienza",
+     "Azione"
+    ],
+    "poster": "bundle://poster-tears",
+    "backdrop": "bundle://backdrop-tears",
+    "overview": "Ad Amsterdam, un gruppo di scienziati tenta di salvare il mondo da robot ostili ricreando un momento del passato.",
+    "badge": "Aggiunto di recente",
+    "rating": "13+"
+   },
+   "video": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
+  },
+  {
+   "id": "c7",
+   "item": {
+    "id": "garage-gti",
+    "title": "La compatta sportiva",
+    "kind": "movie",
+    "year": 2019,
+    "tags": [
+     "Documentario",
+     "Motori"
+    ],
+    "poster": "bundle://poster-garage-gti",
+    "backdrop": "bundle://backdrop-garage-gti",
+    "overview": "Una prova completa di una piccola sportiva: motore, guida, abitacolo e prezzo.",
+    "rating": "T"
+   },
+   "video": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4"
+  }
+ ]
+}

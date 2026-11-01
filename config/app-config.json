@@ -1,0 +1,22 @@
+{
+  "accentHex": "#7C5CFF",
+  "activeProviderId": "demo",
+  "appName": "Lumen",
+  "providers": [
+    {
+      "baseURL": "",
+      "enabled": true,
+      "headers": {},
+      "id": "demo",
+      "name": "Catalogo demo",
+      "paths": {
+        "clips": "/clips",
+        "detail": "/titles/{id}",
+        "home": "/home",
+        "search": "/search?q={query}",
+        "streams": "/titles/{id}/streams?episode={episode}"
+      },
+      "type": "demo"
+    }
+  ]
+}
