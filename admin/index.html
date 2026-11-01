@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lumen Admin</title>
+<meta name="robots" content="noindex">
+<style>
+  :root {
+    --bg: #0a0a0c; --panel: #141418; --panel-2: #1c1c22; --line: #2a2a33;
+    --text: #f2f2f5; --muted: #9a9aa8; --accent: #7c5cff; --ok: #3ccf8e; --warn: #ffb547; --err: #ff5c6c;
+    --radius: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.45; }
+  header.top {
+    position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px;
+    padding: 14px 24px; background: rgba(10,10,12,.82); backdrop-filter: blur(14px); border-bottom: 1px solid var(--line);
+  }
+  .logo { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-weight: 900;
+    background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #000)); }
+  header h1 { font-size: 18px; margin: 0; font-weight: 700; }
+  header .spacer { flex: 1; }
+  .status { font-size: 13px; color: var(--muted); }
+  .status.ok { color: var(--ok); } .status.err { color: var(--err); } .status.warn { color: var(--warn); }
+  main { max-width: 1180px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: minmax(0,1fr) 340px; gap: 24px; }
+  @media (max-width: 960px) { main { grid-template-columns: 1fr; padding: 16px; } aside .sticky { position: static; } .phone { max-width: 260px; margin: 0 auto; } }
+  section.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; }
+  section.card > h2 { margin: 0 0 4px; font-size: 16px; }
+  section.card > p.hint { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+  input, select, textarea {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 9px;
+    padding: 9px 11px; font: inherit; font-size: 14px; width: 100%; outline: none;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  input[type=color] { padding: 3px; height: 40px; }
+  input[type=checkbox] { width: auto; accent-color: var(--accent); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  button {
+    font: inherit; font-size: 14px; font-weight: 600; border-radius: 9px; padding: 9px 14px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+  }
+  button:hover { border-color: #444; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.white { background: #fff; color: #000; border-color: #fff; }
+  button.danger { color: var(--err); }
+  button.small { padding: 6px 10px; font-size: 13px; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .provider { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 12px; overflow: hidden; background: #111115; }
+  .provider > summary { list-style: none; cursor: pointer; padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
+  .provider > summary::-webkit-details-marker { display: none; }
+  .provider[open] > summary { border-bottom: 1px solid var(--line); }
+  .provider .body { padding: 16px; display: grid; gap: 14px; }
+  .pill { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 99px; background: var(--panel-2); color: var(--muted); }
+  .pill.active { background: color-mix(in srgb, var(--accent) 25%, transparent); color: #fff; }
+  .pill.off { color: var(--warn); }
+  .ptitle { font-weight: 700; } .psub { color: var(--muted); font-size: 12px; }
+  .headers .hrow { display: grid; grid-template-columns: 180px 1fr auto; gap: 8px; margin-bottom: 8px; }
+  .note { font-size: 12px; color: var(--muted); }
+  .note.warn { color: var(--warn); }
+  .result { white-space: pre-wrap; font-size: 13px; background: #0d0d10; border: 1px solid var(--line); border-radius: 9px; padding: 10px; }
+  textarea#json { min-height: 260px; resize: vertical; }
+  /* anteprima telefono */
+  .phone { width: 100%; aspect-ratio: 9/18.5; border-radius: 36px; border: 8px solid #222; background: #000; position: relative; overflow: hidden; }
+  .phone .glow { position: absolute; inset: 0 0 45% 0; background: linear-gradient(var(--accent), transparent); opacity: .5; }
+  .phone .hdr { position: relative; display: flex; align-items: center; gap: 8px; padding: 34px 14px 10px; font-weight: 700; font-size: 17px; }
+  .phone .hdr .logo { width: 22px; height: 22px; border-radius: 6px; font-size: 13px; }
+  .phone .chips { position: relative; display: flex; gap: 6px; padding: 0 14px; }
+  .phone .chips span { border: 1px solid #ffffff55; border-radius: 99px; font-size: 10px; padding: 4px 9px; }
+  .phone .hero { position: relative; margin: 12px 14px; height: 52%; border-radius: 12px; border: 1px solid #ffffff2a;
+    background: linear-gradient(transparent 40%, #000 95%), radial-gradient(circle at 50% 35%, var(--accent), #1a1033 70%);
+    display: flex; flex-direction: column; justify-content: flex-end; padding: 12px; gap: 6px; }
+  .phone .hero b { text-align: center; font-size: 20px; letter-spacing: .05em; }
+  .phone .hero .btn { background: #fff; color: #000; border-radius: 6px; text-align: center; font-size: 11px; font-weight: 700; padding: 6px; }
+  .phone .hero .btn.g { background: #ffffff33; color: #fff; }
+  .phone .tabs { position: absolute; left: 14px; right: 14px; bottom: 14px; height: 46px; border-radius: 99px; background: #ffffff1c;
+    backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: space-around; font-size: 9px; color: #ffffffaa; }
+  .phone .tabs .on { background: #ffffff26; color: #fff; border-radius: 99px; padding: 8px 12px; }
+  aside .sticky { position: sticky; top: 84px; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #fff; color: #000; padding: 12px 18px;
+    border-radius: 12px; font-weight: 600; box-shadow: 0 10px 40px #0008; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 50; max-width: 90vw; }
+  .toast.show { opacity: 1; }
+  .toast.err { background: var(--err); color: #fff; }
+  details.help summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  /* Liquid glass */
+  body { background: radial-gradient(1200px 700px at 10% -10%, color-mix(in srgb, var(--accent) 45%, transparent), transparent 60%),
+                     radial-gradient(900px 600px at 110% 20%, rgba(255,107,53,.18), transparent 60%), var(--bg); background-attachment: fixed; }
+  section.card { background: rgba(255,255,255,.06); backdrop-filter: blur(24px) saturate(170%); -webkit-backdrop-filter: blur(24px) saturate(170%);
+    border: 1px solid rgba(255,255,255,.14); border-radius: 26px; box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 20px 50px rgba(0,0,0,.35); }
+  input, select, textarea { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.14); border-radius: 14px; }
+  button { border-radius: 999px; background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.18); backdrop-filter: blur(12px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.2); }
+  button.primary { background: color-mix(in srgb, var(--accent) 80%, transparent); }
+  .provider { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.12); border-radius: 20px; }
+  header.top { background: rgba(10,10,12,.45); }
+  .urow { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; padding: 12px; border-radius: 18px;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); margin-bottom: 8px; }
+  .urow .av { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-weight: 800; background: rgba(255,255,255,.12); }
+  .urow .av.admin { background: var(--accent); }
+  .urow .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  @media (max-width: 600px) { .urow { grid-template-columns: 40px 1fr; } .urow .acts { grid-column: 1 / -1; justify-content: flex-start; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="logo" id="hdrLogo">L</div>
+  <h1><span id="hdrName">Lumen</span> · Pannello amministratore</h1>
+  <div class="spacer"></div>
+  <span class="status" id="status">Non collegato</span>
+</header>
+
+<main>
+  <div>
+    <section class="card">
+      <h2>1 · Collegamento al repository GitHub</h2>
+      <p class="hint">La configurazione vive nel file <span class="mono">config/app-config.json</span> del tuo repository: l'app la scarica all'avvio. Serve un token GitHub con permesso <b>Contents: Read and write</b> solo su questo repository.</p>
+      <div class="grid">
+        <label>Proprietario (utente o organizzazione)<input id="ghOwner" placeholder="es. mario-rossi" autocomplete="off"></label>
+        <label>Repository<input id="ghRepo" placeholder="es. lumen" autocomplete="off"></label>
+        <label>Branch<input id="ghBranch" value="main"></label>
+        <label>Percorso file<input id="ghPath" class="mono" value="config/app-config.json"></label>
+      </div>
+      <div class="grid" style="margin-top:12px">
+        <label>Token di accesso (fine-grained)<input id="ghToken" type="password" placeholder="github_pat_…" autocomplete="off"></label>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <label class="row" style="flex-direction:row;font-weight:500"><input type="checkbox" id="remember"> Ricorda su questo browser</label>
+        <div class="spacer" style="flex:1"></div>
+        <button id="btnLoad">Carica da GitHub</button>
+        <button class="primary" id="btnSave">Salva su GitHub</button>
+      </div>
+      <p class="note" id="rawUrlNote" style="margin-top:12px"></p>
+    </section>
+
+    <section class="card">
+      <h2>2 · Aspetto</h2>
+      <p class="hint">Nome mostrato nell'app e colore principale (pulsanti, badge, barre di avanzamento).</p>
+      <div class="grid">
+        <label>Nome app<input id="appName"></label>
+        <label>Colore principale<input id="accentHex" type="color"></label>
+        <label>Sorgente attiva<select id="activeProvider"></select></label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>3 · API agganciate</h2>
+      <p class="hint">Ogni sorgente deve rispondere nel formato descritto in <span class="mono">docs/API.md</span>. Usa solo contenuti di cui hai i diritti.</p>
+      <div id="providers"></div>
+      <div class="row">
+        <button id="btnAdd">+ Aggiungi API</button>
+        <button id="btnAddDemo">+ Aggiungi demo integrato</button>
+      </div>
+    </section>
+
+    <section class="card" id="usersCard">
+      <h2>4 · Utenti e richieste di accesso</h2>
+      <p class="hint">Si collega al server account (funzione Supabase <span class="mono">lumen-auth</span>). Le nuove registrazioni arrivano anche via email all'amministratore con il link di attivazione.</p>
+      <div class="grid">
+        <label>URL server account<input id="authUrl" class="mono" placeholder="https://xxxx.supabase.co/functions/v1/lumen-auth"></label>
+        <label>Username amministratore<input id="authUser" value="admin" autocomplete="username"></label>
+        <label>Password<input id="authPass" type="password" autocomplete="current-password"></label>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button id="btnAuthLogin">Accedi</button>
+        <button id="btnAuthRefresh" class="small" hidden>Aggiorna</button>
+        <button id="btnAuthLogout" class="small" hidden>Esci</button>
+        <span class="status" id="authStatus"></span>
+      </div>
+      <div id="usersList" style="margin-top:14px"></div>
+    </section>
+
+    <section class="card">
+      <h2>5 · JSON della configurazione</h2>
+      <p class="hint">Per vedere cosa verrà salvato, oppure per copiare la configurazione nell'admin nascosto dell'app (Importa).</p>
+      <textarea id="json" class="mono" readonly></textarea>
+      <div class="row" style="margin-top:12px">
+        <button id="btnCopy">Copia</button>
+        <button id="btnDownload">Scarica .json</button>
+        <button type="button" id="btnImport">Importa .json…</button>
+        <input type="file" id="fileImport" accept="application/json,.json" hidden>
+      </div>
+    </section>
+  </div>
+
+  <aside>
+    <div class="sticky">
+      <section class="card">
+        <h2>Anteprima</h2>
+        <p class="hint">Indicativa: colori e nome come appariranno nell'app.</p>
+        <div class="phone">
+          <div class="glow"></div>
+          <div class="hdr"><div class="logo" id="pvLogo">L</div><span>Home</span></div>
+          <div class="chips"><span>Serie</span><span>Film</span><span>Novità</span></div>
+          <div class="hero"><b>TITOLO</b><div class="btn">▶ Riproduci</div><div class="btn g">+ La mia lista</div></div>
+          <div class="tabs"><span class="on">Home</span><span>Clip</span><span>Cerca</span><span id="pvTab">Il mio Lumen</span></div>
+        </div>
+      </section>
+      <section class="card">
+        <h2>Come arriva all'app</h2>
+        <p class="hint" style="margin:0">Dopo il salvataggio l'app riceve le modifiche al prossimo avvio (o con <i>Aggiorna catalogo</i> nel profilo). GitHub può impiegare fino a 5 minuti a servire la nuova versione del file.</p>
+      </section>
+    </div>
+  </aside>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const DEFAULT_PATHS = {
+  home: "/home",
+  search: "/search?q={query}",
+  detail: "/titles/{id}",
+  streams: "/titles/{id}/streams?episode={episode}",
+  clips: "/clips",
+  browse: ""
+};
+const TMDB_OPTIONS = { tmdbKey: "", omdbKey: "", language: "it-IT", region: "IT" };
+const DEFAULT_CONFIG = {
+  appName: "Lumen", accentHex: "#7C5CFF", activeProviderId: "tmdb",
+  providers: [
+    { id: "tmdb", name: "Catalogo film e serie (TMDB)", type: "tmdb", baseURL: "https://api.themoviedb.org/3", paths: { ...DEFAULT_PATHS }, headers: {}, options: { ...TMDB_OPTIONS }, enabled: true },
+    { id: "demo", name: "Catalogo demo", type: "demo", baseURL: "", paths: { ...DEFAULT_PATHS }, headers: {}, options: {}, enabled: true }
+  ]
+};
+const PATH_LABELS = { home: "Home", search: "Ricerca", detail: "Dettaglio titolo", streams: "Flussi video", clips: "Clip", browse: "Catalogo (facoltativo)" };
+const TYPE_LABELS = { tmdb: "Catalogo TMDB", demo: "Demo integrato", custom: "API personalizzata" };
+
+let config = structuredClone(DEFAULT_CONFIG);
+let fileSha = null;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function toast(msg, isErr = false) {
+  const t = $("toast");
+  t.textContent = msg; t.className = "toast show" + (isErr ? " err" : "");
+  clearTimeout(t._h); t._h = setTimeout(() => t.className = "toast", 3600);
+}
+function setStatus(msg, kind = "") { const s = $("status"); s.textContent = msg; s.className = "status " + kind; }
+
+function normalize(cfg) {
+  const c = { ...structuredClone(DEFAULT_CONFIG), ...cfg };
+  c.providers = (Array.isArray(cfg.providers) && cfg.providers.length ? cfg.providers : DEFAULT_CONFIG.providers).map(p => ({
+    id: String(p.id || "api-" + Math.random().toString(36).slice(2, 8)),
+    name: p.name || p.id || "API",
+    type: ["demo", "tmdb"].includes(p.type) ? p.type : "custom",
+    baseURL: p.baseURL || (p.type === "tmdb" ? "https://api.themoviedb.org/3" : ""),
+    paths: { ...DEFAULT_PATHS, ...(p.paths || {}) },
+    headers: p.headers && typeof p.headers === "object" ? p.headers : {},
+    options: { ...(p.type === "tmdb" ? TMDB_OPTIONS : {}), ...(p.options && typeof p.options === "object" ? p.options : {}) },
+    enabled: p.enabled !== false
+  }));
+  if (!/^#[0-9a-f]{6}$/i.test(c.accentHex)) c.accentHex = DEFAULT_CONFIG.accentHex;
+  return c;
+}
+
+function serialize() {
+  const sortKeys = (v) => Array.isArray(v) ? v.map(sortKeys)
+    : v && typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().map(k => [k, sortKeys(v[k])])) : v;
+  return JSON.stringify(sortKeys(config), null, 2) + "\n";
+}
+
+// ---------- Render ----------
+function render() {
+  $("appName").value = config.appName;
+  $("accentHex").value = config.accentHex.toLowerCase();
+  const sel = $("activeProvider");
+  sel.innerHTML = config.providers.filter(p => p.enabled)
+    .map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+  sel.value = config.activeProviderId;
+  if (sel.value !== config.activeProviderId && sel.options.length) { config.activeProviderId = sel.options[0].value; }
+
+  const open = new Set([...document.querySelectorAll(".provider[open]")].map(d => d.dataset.idx));
+  $("providers").innerHTML = config.providers.map((p, i) => providerHTML(p, i, open.has(String(i)))).join("");
+  updatePreview();
+  $("json").value = serialize();
+}
+
+function providerHTML(p, i, isOpen) {
+  const active = p.id === config.activeProviderId;
+  const headers = Object.entries(p.headers);
+  return `<details class="provider" data-idx="${i}" ${isOpen ? "open" : ""}>
+    <summary>
+      <div style="flex:1;min-width:0">
+        <div class="ptitle">${esc(p.name)}</div>
+        <div class="psub mono">${p.type === "demo" ? "Demo integrato nell'app" : p.type === "tmdb" ? (p.options.tmdbKey ? "Chiave TMDB inserita" : "⚠️ manca la chiave TMDB") : esc(p.baseURL || "—")}</div>
+      </div>
+      ${active ? '<span class="pill active">Attiva</span>' : ""}
+      ${!p.enabled ? '<span class="pill off">Disattivata</span>' : ""}
+      <span class="pill">${p.type === "demo" ? "demo" : p.type === "tmdb" ? "TMDB" : "API"}</span>
+    </summary>
+    <div class="body">
+      <div class="grid">
+        <label>Nome<input data-f="name" data-i="${i}" value="${esc(p.name)}"></label>
+        <label>ID (univoco)<input class="mono" data-f="id" data-i="${i}" value="${esc(p.id)}"></label>
+        <label>Tipo<select data-f="type" data-i="${i}">
+          ${Object.entries(TYPE_LABELS).map(([v, l]) => `<option value="${v}" ${p.type === v ? "selected" : ""}>${l}</option>`).join("")}
+        </select></label>
+        <label>Stato<select data-f="enabled" data-i="${i}">
+          <option value="1" ${p.enabled ? "selected" : ""}>Attiva</option>
+          <option value="0" ${!p.enabled ? "selected" : ""}>Disattivata</option>
+        </select></label>
+      </div>
+      ${p.type === "custom" ? `
+      <label>Indirizzo base<input class="mono" data-f="baseURL" data-i="${i}" value="${esc(p.baseURL)}" placeholder="https://api.esempio.it/v1"></label>
+      <div class="grid">
+        ${Object.keys(DEFAULT_PATHS).map(k => `<label>${PATH_LABELS[k]}<input class="mono" data-path="${k}" data-i="${i}" value="${esc(p.paths[k])}"></label>`).join("")}
+      </div>
+      <p class="note">Segnaposto: <span class="mono">{query}</span>, <span class="mono">{id}</span>, <span class="mono">{episode}</span>. Puoi usare anche URL completi.</p>
+      <div class="headers">
+        <div class="note" style="margin-bottom:8px">Intestazioni HTTP (es. <span class="mono">Authorization: Bearer …</span>)</div>
+        ${headers.map(([k, v], h) => `<div class="hrow">
+          <input class="mono" data-hk="${h}" data-i="${i}" value="${esc(k)}" placeholder="Nome">
+          <input class="mono" data-hv="${h}" data-i="${i}" value="${esc(v)}" placeholder="Valore" type="password">
+          <button class="small danger" data-act="delHeader" data-i="${i}" data-h="${h}">✕</button></div>`).join("")}
+        <button class="small" data-act="addHeader" data-i="${i}">+ Intestazione</button>
+        ${headers.length ? '<p class="note warn">Attenzione: le intestazioni vengono salvate nel file JSON. Se il repository è pubblico chiunque può leggerle. In alternativa inseriscile solo dall\'admin nascosto dell\'app: restano sul dispositivo.</p>' : ""}
+      </div>` : p.type === "tmdb" ? `
+      <div class="grid">
+        <label>Chiave API TMDB (v3) o token v4<input class="mono" type="password" data-opt="tmdbKey" data-i="${i}" value="${esc(p.options.tmdbKey)}" placeholder="themoviedb.org → Impostazioni → API"></label>
+        <label>Chiave OMDb per voto IMDb (facoltativa)<input class="mono" type="password" data-opt="omdbKey" data-i="${i}" value="${esc(p.options.omdbKey)}" placeholder="omdbapi.com/apikey.aspx"></label>
+        <label>Lingua<input class="mono" data-opt="language" data-i="${i}" value="${esc(p.options.language)}"></label>
+        <label>Paese "Dove guardarlo"<input class="mono" data-opt="region" data-i="${i}" value="${esc(p.options.region)}"></label>
+      </div>
+      <p class="note">Catalogo completo di film e serie con trame in italiano, cast, voti, stagioni, trailer e servizi su cui sono disponibili. Non contiene video: per la riproduzione serve una sorgente demo o un'API personalizzata. La chiave TMDB è di sola lettura, ma finisce comunque nel file pubblicato.</p>`
+      : `<p class="note">Il demo integrato usa il catalogo incluso nell'app (film open e flussi di test). Non richiede configurazione.</p>`}
+      <div class="row">
+        ${p.type !== "demo" ? `<button class="small" data-act="test" data-i="${i}">Prova dal browser</button>` : ""}
+        ${p.enabled && !active ? `<button class="small" data-act="activate" data-i="${i}">Imposta come attiva</button>` : ""}
+        <div style="flex:1"></div>
+        <button class="small danger" data-act="delete" data-i="${i}">Elimina</button>
+      </div>
+      <div class="result" id="res-${i}" hidden></div>
+    </div>
+  </details>`;
+}
+
+function updatePreview() {
+  document.documentElement.style.setProperty("--accent", config.accentHex);
+  const initial = (config.appName || "L").trim().charAt(0).toUpperCase() || "L";
+  $("hdrLogo").textContent = initial; $("pvLogo").textContent = initial;
+  $("hdrName").textContent = config.appName || "Lumen";
+  $("pvTab").textContent = "Il mio " + (config.appName || "Lumen");
+  document.title = (config.appName || "Lumen") + " Admin";
+}
+
+// ---------- Eventi editor ----------
+$("appName").addEventListener("input", e => { config.appName = e.target.value; updatePreview(); $("json").value = serialize(); });
+$("accentHex").addEventListener("input", e => { config.accentHex = e.target.value.toUpperCase(); updatePreview(); $("json").value = serialize(); });
+$("activeProvider").addEventListener("change", e => { config.activeProviderId = e.target.value; render(); });
+
+$("providers").addEventListener("input", e => {
+  const t = e.target, i = Number(t.dataset.i);
+  if (Number.isNaN(i)) return;
+  const p = config.providers[i];
+  if (t.dataset.f === "name" || t.dataset.f === "baseURL") p[t.dataset.f] = t.value;
+  else if (t.dataset.f === "id") {
+    const wasActive = config.activeProviderId === p.id;
+    p.id = t.value.trim().replace(/\s+/g, "-");
+    if (wasActive) config.activeProviderId = p.id;
+  }
+  else if (t.dataset.path) p.paths[t.dataset.path] = t.value;
+  else if (t.dataset.opt) p.options[t.dataset.opt] = t.value.trim();
+  else if (t.dataset.hk !== undefined || t.dataset.hv !== undefined) {
+    const rows = [...t.closest(".headers").querySelectorAll(".hrow")].map(r => {
+      const [k, v] = r.querySelectorAll("input"); return [k.value, v.value];
+    });
+    p.headers = Object.fromEntries(rows);
+  }
+  $("json").value = serialize();
+});
+$("providers").addEventListener("change", e => {
+  const t = e.target, i = Number(t.dataset.i);
+  if (Number.isNaN(i)) return;
+  const p = config.providers[i];
+  if (t.dataset.f === "type") {
+    p.type = t.value;
+    if (p.type === "tmdb") { p.options = { ...TMDB_OPTIONS, ...p.options }; if (!/^https?:/.test(p.baseURL)) p.baseURL = "https://api.themoviedb.org/3"; }
+    render();
+  }
+  else if (t.dataset.f === "enabled") { p.enabled = t.value === "1"; render(); }
+  else if (t.dataset.f === "name" || t.dataset.f === "id") render();
+});
+$("providers").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-act]"); if (!b) return;
+  e.preventDefault();
+  const i = Number(b.dataset.i), p = config.providers[i];
+  switch (b.dataset.act) {
+    case "addHeader": p.headers[p.headers["Authorization"] === undefined ? "Authorization" : "X-Header-" + Object.keys(p.headers).length] = ""; render(); break;
+    case "delHeader": { const k = Object.keys(p.headers)[Number(b.dataset.h)]; delete p.headers[k]; render(); break; }
+    case "activate": config.activeProviderId = p.id; render(); break;
+    case "delete":
+      if (!confirm(`Eliminare "${p.name}"?`)) return;
+      config.providers.splice(i, 1);
+      if (!config.providers.length) config.providers = structuredClone(DEFAULT_CONFIG.providers);
+      render(); break;
+    case "test": await testProvider(i); break;
+  }
+});
+$("btnAdd").onclick = () => {
+  config.providers.push({ id: "api-" + Math.random().toString(36).slice(2, 8), name: "Nuova API", type: "custom",
+    baseURL: "https://", paths: { ...DEFAULT_PATHS }, headers: {}, enabled: true });
+  render();
+  const last = document.querySelector(`.provider[data-idx="${config.providers.length - 1}"]`); if (last) { last.open = true; last.scrollIntoView({ behavior: "smooth", block: "center" }); }
+};
+$("btnAddDemo").onclick = () => {
+  if (config.providers.some(p => p.type === "demo")) return toast("Il demo integrato è già presente.");
+  config.providers.unshift(structuredClone(DEFAULT_CONFIG.providers[0])); render();
+};
+
+// ---------- Test dal browser ----------
+function buildURL(p, template, vars = {}) {
+  let path = template;
+  for (const [k, v] of Object.entries(vars)) path = path.replaceAll(`{${k}}`, encodeURIComponent(v));
+  path = path.replace(/[?&]episode=$/, "").replace("?episode=&", "?");
+  if (/^https?:\/\//i.test(path)) return path;
+  return p.baseURL.replace(/\/+$/, "") + (path.startsWith("/") ? path : "/" + path);
+}
+async function testTMDB(p, box) {
+  const key = p.options.tmdbKey || "";
+  if (!key) { box.textContent = "❌ Inserisci la chiave TMDB."; return; }
+  const bearer = key.startsWith("eyJ");
+  const url = (path, q = {}) => {
+    const u = new URL((p.baseURL || "https://api.themoviedb.org/3").replace(/\/+$/, "") + path);
+    u.searchParams.set("language", p.options.language || "it-IT");
+    if (!bearer) u.searchParams.set("api_key", key);
+    for (const [k, v] of Object.entries(q)) u.searchParams.set(k, v);
+    return u;
+  };
+  const get = async (path, q) => {
+    const r = await fetch(url(path, q), { headers: bearer ? { Authorization: "Bearer " + key } : {} });
+    if (r.status === 401) throw new Error("chiave non valida");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  };
+  const lines = [];
+  try {
+    const t = await get("/trending/all/week");
+    lines.push(`✅ TMDB raggiungibile: ${t.total_results?.toLocaleString("it-IT") ?? "?"} titoli di tendenza, primo: "${t.results?.[0]?.title || t.results?.[0]?.name}"`);
+    const d = await get("/discover/movie");
+    lines.push(`✅ Catalogo film esplorabile: ${d.total_results?.toLocaleString("it-IT")} titoli`);
+    const tv = await get("/discover/tv");
+    lines.push(`✅ Catalogo serie esplorabile: ${tv.total_results?.toLocaleString("it-IT")} titoli`);
+  } catch (e) { lines.push("❌ TMDB: " + e.message); }
+  if (p.options.omdbKey) {
+    try {
+      const r = await fetch(`https://www.omdbapi.com/?i=tt0111161&apikey=${encodeURIComponent(p.options.omdbKey)}`);
+      const j = await r.json();
+      lines.push(j.Response === "True" ? `✅ OMDb: voto IMDb di prova ${j.imdbRating}` : `❌ OMDb: ${j.Error}`);
+    } catch (e) { lines.push("⚠️ OMDb non raggiungibile dal browser: " + e.message); }
+  }
+  box.textContent = lines.join("\n");
+}
+
+async function testProvider(i) {
+  const p = config.providers[i], box = $("res-" + i);
+  if (p.type === "tmdb") { box.hidden = false; box.textContent = "Verifica in corso…"; return testTMDB(p, box); }
+  box.hidden = false; box.textContent = "Verifica in corso…";
+  const lines = [];
+  const get = async (url) => {
+    const r = await fetch(url, { headers: { Accept: "application/json", ...p.headers } });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  };
+  try {
+    const home = await get(buildURL(p, p.paths.home));
+    const sections = Array.isArray(home.sections) ? home.sections : [];
+    const items = sections.flatMap(s => Array.isArray(s.items) ? s.items : []);
+    lines.push(`✅ Home: ${sections.length} sezioni, ${items.length} titoli${home.hero ? ", hero presente" : ""}`);
+    const bad = items.filter(it => !it.id || !it.title).length;
+    if (bad) lines.push(`⚠️ ${bad} titoli senza "id" o "title" verranno ignorati`);
+    const first = items[0] || home.hero;
+    if (first) {
+      try { const d = await get(buildURL(p, p.paths.detail, { id: first.id })); lines.push(`✅ Dettaglio "${first.title}": ${(d.seasons || []).length} stagioni`); }
+      catch (e) { lines.push(`⚠️ Dettaglio: ${e.message}`); }
+      try {
+        const s = await get(buildURL(p, p.paths.streams, { id: first.id, episode: "" }));
+        const list = Array.isArray(s) ? s : (s.streams || s.sources || s.results || s.items || []);
+        lines.push(list.length ? `✅ Flussi: ${list.length} (${list[0].url})` : "⚠️ Nessun flusso restituito");
+      } catch (e) { lines.push(`ℹ️ Flussi: ${e.message}${first.kind === "series" ? " (serie: i flussi si chiedono per episodio)" : ""}`); }
+    }
+    try { const q = await get(buildURL(p, p.paths.search, { query: "a" })); const n = Array.isArray(q) ? q.length : (q.results || q.items || []).length; lines.push(`✅ Ricerca: ${n} risultati per "a"`); }
+    catch (e) { lines.push(`⚠️ Ricerca: ${e.message}`); }
+    try { const c = await get(buildURL(p, p.paths.clips)); const n = Array.isArray(c) ? c.length : (c.clips || c.items || []).length; lines.push(`✅ Clip: ${n}`); }
+    catch (e) { lines.push(`ℹ️ Clip: ${e.message} (facoltative)`); }
+  } catch (e) {
+    lines.push(`❌ Home non raggiungibile: ${e.message}`);
+    lines.push("Se l'API funziona nell'app ma non qui, probabilmente il server non abilita CORS per i browser: non è un problema per l'app iOS.");
+  }
+  box.textContent = lines.join("\n");
+}
+
+// ---------- GitHub ----------
+const GH_FIELDS = ["ghOwner", "ghRepo", "ghBranch", "ghPath", "ghToken"];
+function gh() {
+  const v = Object.fromEntries(GH_FIELDS.map(f => [f, $(f).value.trim()]));
+  return { owner: v.ghOwner, repo: v.ghRepo, branch: v.ghBranch || "main", path: v.ghPath || "config/app-config.json", token: v.ghToken };
+}
+function updateRawNote() {
+  const g = gh();
+  $("rawUrlNote").innerHTML = g.owner && g.repo
+    ? `URL letto dall'app: <span class="mono">https://raw.githubusercontent.com/${esc(g.owner)}/${esc(g.repo)}/${esc(g.branch)}/${esc(g.path)}</span>`
+    : "";
+}
+function persistGH() {
+  try {
+    if ($("remember").checked) localStorage.setItem("lumen.gh", JSON.stringify(Object.fromEntries(GH_FIELDS.map(f => [f, $(f).value]))));
+    else localStorage.removeItem("lumen.gh");
+  } catch (_) {}
+}
+GH_FIELDS.forEach(f => $(f).addEventListener("input", () => { updateRawNote(); persistGH(); }));
+$("remember").addEventListener("change", persistGH);
+
+const b64encode = (s) => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+const b64decode = (s) => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g, "")), c => c.charCodeAt(0)));
+
+async function ghRequest(method, body) {
+  const g = gh();
+  if (!g.owner || !g.repo) throw new Error("Inserisci proprietario e repository.");
+  const url = `https://api.github.com/repos/${encodeURIComponent(g.owner)}/${encodeURIComponent(g.repo)}/contents/${g.path.split("/").map(encodeURIComponent).join("/")}`
+    + (method === "GET" ? `?ref=${encodeURIComponent(g.branch)}` : "");
+  const headers = { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+  if (g.token) headers.Authorization = "Bearer " + g.token;
+  const r = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined, cache: "no-store" });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const hint = r.status === 401 ? " (token non valido)" : r.status === 403 ? " (token senza permesso di scrittura)" : r.status === 404 ? " (repository, branch o file non trovati, o token senza accesso)" : r.status === 409 ? " (il file è cambiato nel frattempo: ricarica)" : "";
+    throw new Error(`GitHub ${r.status}${hint}: ${data.message || ""}`);
+  }
+  return data;
+}
+
+$("btnLoad").onclick = async () => {
+  setStatus("Caricamento…");
+  try {
+    const data = await ghRequest("GET");
+    fileSha = data.sha;
+    config = normalize(JSON.parse(b64decode(data.content)));
+    render();
+    setStatus(`Caricato · ${gh().owner}/${gh().repo}`, "ok");
+    toast("Configurazione caricata da GitHub");
+  } catch (e) {
+    if (String(e.message).includes("404")) { fileSha = null; setStatus("File non trovato: verrà creato al salvataggio", "warn"); }
+    else setStatus("Errore di caricamento", "err");
+    toast(e.message, true);
+  }
+};
+
+function validate() {
+  const ids = config.providers.map(p => p.id);
+  if (ids.some(id => !id)) return "Ogni API deve avere un ID.";
+  if (new Set(ids).size !== ids.length) return "Gli ID delle API devono essere tutti diversi.";
+  for (const p of config.providers) {
+    if (p.type === "tmdb" && p.enabled && !p.options.tmdbKey && p.id === config.activeProviderId)
+      return `"${p.name}" è la sorgente attiva ma manca la chiave TMDB.`;
+    if (p.type === "custom" && !/^https?:\/\/[^/]+/i.test(p.baseURL) && !/^https?:\/\//i.test(p.paths.home))
+      return `"${p.name}": indirizzo base non valido.`;
+  }
+  if (!config.providers.some(p => p.enabled)) return "Almeno una sorgente deve essere attiva.";
+  return null;
+}
+
+$("btnSave").onclick = async () => {
+  const err = validate(); if (err) return toast(err, true);
+  if (!gh().token) return toast("Serve un token GitHub per salvare.", true);
+  if (config.providers.some(p => Object.keys(p.headers).length) &&
+      !confirm("Alcune API hanno intestazioni (token/chiavi) che finiranno nel file su GitHub. Continuare?")) return;
+  setStatus("Salvataggio…");
+  try {
+    if (fileSha === null) { try { fileSha = (await ghRequest("GET")).sha; } catch (_) {} }
+    const body = { message: `Aggiorna configurazione app (${new Date().toLocaleString("it-IT")})`, content: b64encode(serialize()), branch: gh().branch };
+    if (fileSha) body.sha = fileSha;
+    const res = await ghRequest("PUT", body);
+    fileSha = res.content.sha;
+    setStatus("Salvato su GitHub", "ok");
+    toast("Salvato. L'app lo riceverà al prossimo avvio.");
+  } catch (e) { setStatus("Errore di salvataggio", "err"); toast(e.message, true); }
+};
+
+// ---------- Import / export ----------
+$("btnCopy").onclick = async () => { try { await navigator.clipboard.writeText(serialize()); toast("JSON copiato"); } catch (_) { $("json").select(); } };
+$("btnDownload").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([serialize()], { type: "application/json" }));
+  a.download = "app-config.json"; a.click(); URL.revokeObjectURL(a.href);
+};
+$("btnImport").onclick = () => $("fileImport").click();
+$("fileImport").onchange = async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try { config = normalize(JSON.parse(await f.text())); render(); toast("Configurazione importata (non ancora salvata)"); }
+  catch (err) { toast("File non valido: " + err.message, true); }
+  e.target.value = "";
+};
+
+// ---------- Utenti (server account) ----------
+let authToken = null;
+try { authToken = sessionStorage.getItem("lumen.authToken"); } catch (_) {}
+const authBase = () => $("authUrl").value.trim().replace(/\/+$/, "");
+async function authCall(path, method = "GET", body) {
+  const r = await fetch(authBase() + path, {
+    method, headers: { "Content-Type": "application/json", ...(authToken ? { Authorization: "Bearer " + authToken } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || "Errore " + r.status);
+  return data;
+}
+function setAuthUI(logged) {
+  $("btnAuthLogin").hidden = logged; $("btnAuthRefresh").hidden = !logged; $("btnAuthLogout").hidden = !logged;
+  $("authPass").disabled = logged;
+  if (!logged) $("usersList").innerHTML = "";
+}
+async function loadUsers() {
+  const box = $("usersList");
+  try {
+    const { users } = await authCall("/users");
+    const fmt = (d) => d ? new Date(d).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" }) : "";
+    const state = (u) => u.approved ? "Attivo" : (u.approvedAt ? "Disattivato" : "In attesa");
+    box.innerHTML = users.length ? users.map(u => `<div class="urow">
+      <div class="av ${u.role === "admin" ? "admin" : ""}">${esc(u.username[0].toUpperCase())}</div>
+      <div><div class="ptitle">${esc(u.username)} ${u.role === "admin" ? '<span class="pill active">ADMIN</span>' : ""}
+        <span class="pill ${u.approved ? "" : "off"}">${state(u)}</span></div>
+        <div class="psub">${esc(u.email)} · registrato ${fmt(u.createdAt)}</div></div>
+      <div class="acts">
+        ${!u.approved ? `<button class="small primary" data-u="${u.id}" data-ua="approve">Attiva</button>` : ""}
+        ${u.approved ? `<button class="small" data-u="${u.id}" data-ua="revoke">Disattiva</button>` : ""}
+        <button class="small" data-u="${u.id}" data-ua="${u.role === "admin" ? "makeUser" : "makeAdmin"}">${u.role === "admin" ? "Togli admin" : "Rendi admin"}</button>
+        <button class="small" data-u="${u.id}" data-ua="resetPassword">Password…</button>
+        <button class="small danger" data-u="${u.id}" data-ua="delete" data-name="${esc(u.username)}">Elimina</button>
+      </div></div>`).join("") : '<p class="note">Nessun utente.</p>';
+    $("authStatus").textContent = `${users.filter(u => !u.approved && !u.approvedAt).length} in attesa · ${users.length} totali`;
+    $("authStatus").className = "status ok";
+  } catch (e) {
+    if (/Sessione|401/.test(e.message)) { authToken = null; try { sessionStorage.removeItem("lumen.authToken"); } catch (_) {} setAuthUI(false); }
+    $("authStatus").textContent = e.message; $("authStatus").className = "status err";
+  }
+}
+$("btnAuthLogin").onclick = async () => {
+  if (!/^https?:\/\//.test(authBase())) return toast("Inserisci l'URL del server account.", true);
+  try {
+    const { token, user } = await authCall("/login", "POST", { username: $("authUser").value, password: $("authPass").value });
+    if (user.role !== "admin") return toast("Questo account non è amministratore.", true);
+    authToken = token; try { sessionStorage.setItem("lumen.authToken", token); localStorage.setItem("lumen.authUrl", authBase()); } catch (_) {}
+    $("authPass").value = ""; setAuthUI(true); loadUsers();
+    if ($("authUser").value.trim().toLowerCase() === "admin") toast("Accesso eseguito. Ricorda di cambiare la password predefinita dall'app.");
+  } catch (e) { toast(e.message, true); }
+};
+$("btnAuthRefresh").onclick = loadUsers;
+$("btnAuthLogout").onclick = () => { authToken = null; try { sessionStorage.removeItem("lumen.authToken"); } catch (_) {} setAuthUI(false); $("authStatus").textContent = ""; };
+$("usersList").addEventListener("click", async (e) => {
+  const b = e.target.closest("button[data-ua]"); if (!b) return;
+  const id = b.dataset.u, action = b.dataset.ua;
+  try {
+    if (action === "delete") {
+      if (!confirm(`Eliminare l'account "${b.dataset.name}"?`)) return;
+      await authCall("/users/" + encodeURIComponent(id), "DELETE");
+    } else if (action === "resetPassword") {
+      const pw = prompt("Nuova password (almeno 6 caratteri):"); if (!pw) return;
+      await authCall("/users/" + encodeURIComponent(id), "POST", { action, newPassword: pw });
+    } else {
+      await authCall("/users/" + encodeURIComponent(id), "POST", { action });
+    }
+    toast("Fatto"); loadUsers();
+  } catch (err) { toast(err.message, true); }
+});
+
+// ---------- Avvio ----------
+(function init() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("lumen.gh") || "null");
+    if (saved) { GH_FIELDS.forEach(f => { if (saved[f] !== undefined) $(f).value = saved[f]; }); $("remember").checked = true; }
+  } catch (_) {}
+  const m = location.hostname.match(/^([^.]+)\.github\.io$/);
+  if (m && !$("ghOwner").value) {
+    $("ghOwner").value = m[1];
+    const repo = location.pathname.split("/").filter(Boolean)[0];
+    if (repo && !$("ghRepo").value) $("ghRepo").value = repo;
+  }
+  updateRawNote();
+  try { const u = localStorage.getItem("lumen.authUrl"); if (u) $("authUrl").value = u; } catch (_) {}
+  setAuthUI(!!authToken);
+  if (authToken && authBase()) loadUsers();
+  render();
+  if ($("ghOwner").value && $("ghRepo").value && $("ghToken").value) $("btnLoad").click();
+})();
+</script>
+</body>
+</html>

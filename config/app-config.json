@@ -1,0 +1,46 @@
+{
+  "accentHex": "#7C5CFF",
+  "activeProviderId": "tmdb",
+  "appName": "Lumen",
+  "providers": [
+    {
+      "baseURL": "https://api.themoviedb.org/3",
+      "enabled": true,
+      "headers": {},
+      "id": "tmdb",
+      "name": "Catalogo film e serie (TMDB)",
+      "options": {
+        "language": "it-IT",
+        "omdbKey": "",
+        "region": "IT",
+        "tmdbKey": ""
+      },
+      "paths": {
+        "browse": "",
+        "clips": "/clips",
+        "detail": "/titles/{id}",
+        "home": "/home",
+        "search": "/search?q={query}",
+        "streams": "/titles/{id}/streams?episode={episode}"
+      },
+      "type": "tmdb"
+    },
+    {
+      "baseURL": "",
+      "enabled": true,
+      "headers": {},
+      "id": "demo",
+      "name": "Catalogo demo",
+      "options": {},
+      "paths": {
+        "browse": "",
+        "clips": "/clips",
+        "detail": "/titles/{id}",
+        "home": "/home",
+        "search": "/search?q={query}",
+        "streams": "/titles/{id}/streams?episode={episode}"
+      },
+      "type": "demo"
+    }
+  ]
+}

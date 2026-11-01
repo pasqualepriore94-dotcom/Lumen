@@ -1,0 +1,237 @@
+import Foundation
+import Observation
+import Security
+import CryptoKit
+
+struct AppUser: Codable, Identifiable, Hashable {
+    var id: String
+    var username: String
+    var email: String
+    var role: String
+    var approved: Bool
+    var createdAt: String?
+    var approvedAt: String?
+
+    var isAdmin: Bool { role == "admin" }
+
+    var createdDate: Date? {
+        guard let createdAt else { return nil }
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f.date(from: createdAt) ?? ISO8601DateFormatter().date(from: createdAt)
+    }
+}
+
+enum AuthError: LocalizedError {
+    case server(String)
+    case noServer
+    case invalidCredentials
+
+    var errorDescription: String? {
+        switch self {
+        case .server(let m): return m
+        case .noServer: return "Il server degli account non è configurato: per ora è disponibile solo l'accesso amministratore."
+        case .invalidCredentials: return "Username o password errati."
+        }
+    }
+}
+
+/// Account utente. Con un server configurato (funzione Supabase `lumen-auth`) gestisce registrazione,
+/// attivazione da parte dell'admin e ruoli. Senza server funziona solo l'account amministratore locale.
+@MainActor
+@Observable
+final class AuthStore {
+    private enum Keys {
+        static let server = "lumen.authServerURL"
+        static let user = "lumen.currentUser"
+        static let localAdminHash = "lumen.localAdminHash"
+        static let token = "lumen.authToken"
+    }
+
+    var user: AppUser? = nil
+    var isRestoring = true
+    var serverURL: String { didSet { UserDefaults.standard.set(serverURL, forKey: Keys.server) } }
+
+    var isLoggedIn: Bool { user != nil }
+    var isAdmin: Bool { user?.isAdmin == true }
+    var hasServer: Bool { normalizedServer != nil }
+
+    init() {
+        let bundled = (Bundle.main.object(forInfoDictionaryKey: "AuthServerURL") as? String)?
+            .trimmingCharacters(in: .whitespaces) ?? ""
+        serverURL = UserDefaults.standard.string(forKey: Keys.server) ?? (bundled.hasPrefix("http") ? bundled : "")
+        if let data = UserDefaults.standard.data(forKey: Keys.user),
+           let saved = try? JSONDecoder().decode(AppUser.self, from: data) {
+            user = saved
+        }
+    }
+
+    private var normalizedServer: String? {
+        var s = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard s.lowercased().hasPrefix("http") else { return nil }
+        while s.hasSuffix("/") { s.removeLast() }
+        return s
+    }
+
+    // MARK: Sessione
+
+    /// All'avvio verifica che il token sia ancora valido e che l'account sia ancora attivo.
+    func restore() async {
+        defer { isRestoring = false }
+        guard user != nil else { return }
+        guard hasServer else {
+            if user?.id != "local-admin" { signOut() }
+            return
+        }
+        guard Keychain.read(Keys.token) != nil else { signOut(); return }
+        do {
+            let response: UserEnvelope = try await request("/me", method: "GET", auth: true)
+            setUser(response.user)
+        } catch let error as AuthError {
+            if case .server = error { signOut() }
+        } catch {
+            // Offline: resta l'ultima sessione nota.
+        }
+    }
+
+    func login(username: String, password: String) async throws {
+        let name = username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard hasServer else {
+            guard name == "admin", Self.sha(password) == localAdminHash else { throw AuthError.invalidCredentials }
+            setUser(AppUser(id: "local-admin", username: "admin", email: "pasquale.priore94@gmail.com",
+                            role: "admin", approved: true))
+            return
+        }
+        let response: LoginResponse = try await request("/login", body: ["username": name, "password": password])
+        Keychain.save(response.token, for: Keys.token)
+        setUser(response.user)
+    }
+
+    func register(username: String, email: String, password: String) async throws -> String {
+        guard hasServer else { throw AuthError.noServer }
+        let response: RegisterResponse = try await request("/register", body: [
+            "username": username.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+            "email": email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+            "password": password,
+        ])
+        return response.message
+    }
+
+    func changePassword(old: String, new: String) async throws {
+        guard new.count >= (hasServer ? 6 : 4) else { throw AuthError.server("La nuova password è troppo corta.") }
+        if !hasServer {
+            guard Self.sha(old) == localAdminHash else { throw AuthError.server("La password attuale non è corretta.") }
+            UserDefaults.standard.set(Self.sha(new), forKey: Keys.localAdminHash)
+            return
+        }
+        let _: OkResponse = try await request("/password", body: ["oldPassword": old, "newPassword": new], auth: true)
+    }
+
+    func signOut() {
+        Keychain.delete(Keys.token)
+        UserDefaults.standard.removeObject(forKey: Keys.user)
+        user = nil
+    }
+
+    // MARK: Amministrazione utenti
+
+    func listUsers() async throws -> [AppUser] {
+        guard hasServer else { throw AuthError.noServer }
+        let response: UsersResponse = try await request("/users", method: "GET", auth: true)
+        return response.users
+    }
+
+    @discardableResult
+    func perform(_ action: String, on target: AppUser, newPassword: String? = nil) async throws -> AppUser {
+        var body = ["action": action]
+        if let newPassword { body["newPassword"] = newPassword }
+        let response: UserEnvelope = try await request("/users/\(target.id)", body: body, auth: true)
+        return response.user
+    }
+
+    func delete(_ target: AppUser) async throws {
+        let _: OkResponse = try await request("/users/\(target.id)", method: "DELETE", auth: true)
+    }
+
+    // MARK: Interni
+
+    private var localAdminHash: String {
+        UserDefaults.standard.string(forKey: Keys.localAdminHash) ?? Self.sha("admin")
+    }
+
+    private static func sha(_ s: String) -> String {
+        SHA256.hash(data: Data(s.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func setUser(_ u: AppUser) {
+        user = u
+        if let data = try? JSONEncoder().encode(u) { UserDefaults.standard.set(data, forKey: Keys.user) }
+    }
+
+    private struct LoginResponse: Decodable { let token: String; let user: AppUser }
+    private struct RegisterResponse: Decodable { let message: String }
+    private struct UserEnvelope: Decodable { let user: AppUser }
+    private struct UsersResponse: Decodable { let users: [AppUser] }
+    private struct OkResponse: Decodable { let ok: Bool? }
+    private struct ErrorResponse: Decodable { let error: String }
+
+    private func request<T: Decodable>(_ path: String, method: String = "POST",
+                                       body: [String: String]? = nil, auth: Bool = false) async throws -> T {
+        guard let base = normalizedServer, let url = URL(string: base + path) else { throw AuthError.noServer }
+        var req = URLRequest(url: url)
+        req.httpMethod = method
+        req.timeoutInterval = 20
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if auth, let token = Keychain.read(Keys.token) {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        if let body { req.httpBody = try JSONSerialization.data(withJSONObject: body) }
+        let (data, response) = try await URLSession.shared.data(for: req)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            if let e = try? JSONDecoder().decode(ErrorResponse.self, from: data) { throw AuthError.server(e.error) }
+            throw AuthError.server("Errore del server (\(status)).")
+        }
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+}
+
+/// Salvataggio minimo del token nel portachiavi di iOS.
+enum Keychain {
+    private static let service = "app.lumen.auth"
+
+    static func save(_ value: String, for key: String) {
+        delete(key)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+            kSecValueData as String: Data(value.utf8),
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+        ]
+        SecItemAdd(query as CFDictionary, nil)
+    }
+
+    static func read(_ key: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func delete(_ key: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: key,
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+}
