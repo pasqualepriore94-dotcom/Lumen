@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct DetailView: View {
     @Environment(AppState.self) private var app
@@ -11,6 +12,7 @@ struct DetailView: View {
     @State private var errorMessage: String?
     @State private var seasonIndex = 0
     @State private var expandedOverview = false
+    @State private var watchSummary: WatchedEntry?
 
     private var current: MediaItem { detail?.item ?? item }
     private var canStream: Bool { app.provider.capabilities.streams }
@@ -72,6 +74,7 @@ struct DetailView: View {
         .presentationCornerRadius(34)
         .preferredColorScheme(.dark)
         .playbackHUD()
+        .sheet(item: $watchSummary) { WatchTimeView(highlight: $0) }
         .task(id: app.contentKey) { await load() }
     }
 
@@ -214,6 +217,7 @@ struct DetailView: View {
                 actionButton(library.contains(current) ? "checkmark" : "plus", "La mia lista") {
                     withAnimation { library.toggle(current) }
                 }
+                watchedButton
                 ShareLink(item: current.title, message: Text(current.overview ?? "")) {
                     actionLabel("square.and.arrow.up", "Condividi")
                 }
@@ -223,6 +227,24 @@ struct DetailView: View {
                 }
             }
         }
+    }
+
+    private var watchedButton: some View {
+        let seen = library.isWatched(current.id)
+        return Button {
+            if seen {
+                withAnimation { library.unmarkWatched(current.id) }
+            } else {
+                let entry = WatchedEntry.make(item: current, detail: detail)
+                withAnimation { library.markWatched(entry) }
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                watchSummary = entry
+            }
+        } label: {
+            actionLabel(seen ? "eye.fill" : "eye", seen ? "Visto ✓" : "Visto")
+        }
+        .buttonStyle(GlassButtonStyle(tint: seen ? app.accent : nil,
+                                      shape: AnyShape(RoundedRectangle(cornerRadius: 18, style: .continuous))))
     }
 
     private func actionButton(_ icon: String, _ title: String, action: @escaping () -> Void) -> some View {

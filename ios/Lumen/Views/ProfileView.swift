@@ -7,6 +7,8 @@ struct ProfileView: View {
 
     @State private var showPassword = false
     @State private var confirmLogout = false
+    @State private var showWatchTime = false
+    @State private var showIconPicker = false
 
     private var version: String {
         let v = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
@@ -34,6 +36,7 @@ struct ProfileView: View {
                     }
                 }
 
+                watchTimeCard
                 if auth.isAdmin { adminCard }
                 settings
 
@@ -60,6 +63,8 @@ struct ProfileView: View {
             .ignoresSafeArea()
         }
         .sheet(isPresented: $showPassword) { ChangePasswordSheet() }
+        .sheet(isPresented: $showWatchTime) { WatchTimeView() }
+        .sheet(isPresented: $showIconPicker) { AppIconPicker() }
         .confirmationDialog("Vuoi uscire dall'account?", isPresented: $confirmLogout, titleVisibility: .visible) {
             Button("Esci", role: .destructive) { auth.signOut() }
         }
@@ -86,6 +91,34 @@ struct ProfileView: View {
         .liquidGlassCard(radius: 28)
         .padding(.horizontal, 16)
         .padding(.top, 8)
+    }
+
+    private var watchTimeCard: some View {
+        let t = library.totals
+        return Button { showWatchTime = true } label: {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label("Tempo davanti alla TV", systemImage: "hourglass").font(.headline)
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundStyle(Theme.secondaryText)
+                }
+                Text(formatWatchTime(t.totalMinutes))
+                    .font(.system(size: 30, weight: .heavy, design: .rounded))
+                HStack(spacing: 16) {
+                    Label("\(formatWatchTime(t.movieMinutes)) · \(t.movies) film", systemImage: "film")
+                    Label("\(formatWatchTime(t.seriesMinutes)) · \(t.series) serie", systemImage: "tv")
+                }
+                .font(.caption)
+                .foregroundStyle(Theme.secondaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            }
+            .foregroundStyle(.white)
+            .padding(18)
+        }
+        .buttonStyle(GlassButtonStyle(tint: app.accent.opacity(0.35),
+                                      shape: AnyShape(RoundedRectangle(cornerRadius: 26, style: .continuous))))
+        .padding(.horizontal, 16)
     }
 
     private var adminCard: some View {
@@ -117,6 +150,11 @@ struct ProfileView: View {
                 divider
                 Button { Task { await app.syncRemote() } } label: {
                     row(icon: "arrow.triangle.2.circlepath", title: "Aggiorna catalogo", value: app.isSyncing ? "…" : nil)
+                }
+                .buttonStyle(.plain)
+                divider
+                Button { showIconPicker = true } label: {
+                    row(icon: "app.badge", title: "Icona dell'app", value: nil)
                 }
                 .buttonStyle(.plain)
                 divider
