@@ -92,7 +92,8 @@ struct GlassButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .liquidGlass(in: shape, tint: tint, interactive: true)
+            .liquidGlass(in: shape, tint: tint)
+            .contentShape(shape)
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
             .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
     }

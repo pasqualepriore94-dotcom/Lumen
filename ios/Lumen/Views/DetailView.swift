@@ -62,13 +62,20 @@ struct DetailView: View {
         }
         .foregroundStyle(.white)
         .overlay(alignment: .topTrailing) {
-            Button { dismiss() } label: {
+            Button(action: close) {
                 Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .bold))
-                    .frame(width: 38, height: 38)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(.ultraThinMaterial, in: Circle())
+                    .overlay(Circle().stroke(.white.opacity(0.3), lineWidth: 0.6))
+                    .contentShape(Circle())
             }
-            .buttonStyle(GlassButtonStyle(shape: AnyShape(Circle())))
-            .padding(14)
+            .buttonStyle(.plain)
+            .padding(.top, 18)
+            .padding(.trailing, 16)
+            .zIndex(10)
+            .accessibilityLabel("Chiudi")
         }
         .presentationDragIndicator(.visible)
         .presentationBackground(.black)
@@ -80,6 +87,11 @@ struct DetailView: View {
             TrailerPlayerView(title: current.title, url: t.url)
         }
         .task(id: app.contentKey) { await load() }
+    }
+
+    private func close() {
+        if app.detailItem?.id == item.id { app.detailItem = nil }
+        dismiss()
     }
 
     // MARK: Testata
@@ -237,7 +249,43 @@ struct DetailView: View {
         }
     }
 
+    @ViewBuilder
     private var watchedButton: some View {
+        if current.isSeries {
+            seriesWatchedButton
+        } else {
+            movieWatchedButton
+        }
+    }
+
+    private var allEpisodes: [Episode] { detail?.seasons.flatMap(\.episodes) ?? [] }
+
+    private var seriesWatchedButton: some View {
+        let count = library.watchedEpisodeCount(seriesId: current.id)
+        let total = allEpisodes.count
+        return Menu {
+            Button("Segna tutti gli episodi come visti", systemImage: "eye") {
+                library.setEpisodes(allEpisodes, watched: true, item: current, detail: detail)
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            }
+            .disabled(total == 0)
+            if count > 0 || library.isWatched(current.id) {
+                Button("Rimuovi tutti gli episodi visti", systemImage: "eye.slash", role: .destructive) {
+                    library.unmarkWatched(current.id)
+                }
+            }
+            Button("Tempo davanti alla TV", systemImage: "hourglass") {
+                watchSummary = library.watchedList.first { $0.id == current.id }
+                    ?? WatchedEntry(item: current, minutes: 0, episodes: 0, estimated: false, date: Date())
+            }
+        } label: {
+            actionLabel(count > 0 ? "eye.fill" : "eye", total > 0 ? "Visti \(count)/\(total)" : "Visti \(count)")
+                .liquidGlass(in: RoundedRectangle(cornerRadius: 18, style: .continuous),
+                             tint: count > 0 ? app.accent : nil)
+        }
+    }
+
+    private var movieWatchedButton: some View {
         let seen = library.isWatched(current.id)
         return Button {
             if seen {
@@ -367,8 +415,14 @@ struct DetailView: View {
                     }
                 }
             }
+            seasonToggle(seasons[index], detail: detail)
             ForEach(seasons[index].episodes) { episode in
-                EpisodeRow(episode: episode, fallbackImage: current.bestWideImage, playable: canStream) {
+                EpisodeRow(episode: episode, fallbackImage: current.bestWideImage, playable: canStream,
+                           watched: library.isEpisodeWatched(seriesId: current.id, episodeId: episode.id),
+                           toggleWatched: {
+                               withAnimation(.snappy) { library.toggleEpisode(episode, item: current, detail: detail) }
+                               UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                           }) {
                     Task {
                         await Playback.play(item: current, episode: episode,
                                             episodeLabel: detail.label(for: episode), app: app, library: library)
@@ -377,6 +431,29 @@ struct DetailView: View {
             }
         }
         .padding(.top, 8)
+    }
+
+    private func seasonToggle(_ season: Season, detail: MediaDetail) -> some View {
+        let seen = season.episodes.filter { library.isEpisodeWatched(seriesId: current.id, episodeId: $0.id) }.count
+        let complete = seen == season.episodes.count && seen > 0
+        return Button {
+            withAnimation(.snappy) {
+                library.setEpisodes(season.episodes, watched: !complete, item: current, detail: detail)
+            }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: complete ? "checkmark.circle.fill" : "circle.dashed")
+                Text(complete ? "\(season.displayTitle) vista" : "Segna \(season.displayTitle.lowercased()) come vista")
+                Spacer()
+                Text("\(seen)/\(season.episodes.count)").foregroundStyle(Theme.secondaryText)
+            }
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .frame(height: 40)
+        }
+        .buttonStyle(GlassButtonStyle(tint: complete ? app.accent : nil))
     }
 
     private func load() async {
@@ -396,9 +473,12 @@ struct DetailView: View {
 }
 
 struct EpisodeRow: View {
+    @Environment(AppState.self) private var app
     let episode: Episode
     let fallbackImage: URL?
     var playable = true
+    var watched = false
+    var toggleWatched: () -> Void = {}
     let play: () -> Void
 
     var body: some View {
@@ -424,14 +504,28 @@ struct EpisodeRow: View {
                     }
                     Spacer(minLength: 0)
                 }
+                .padding(.trailing, 42)
             }
             .buttonStyle(.plain)
+            .overlay(alignment: .trailing) {
+                Button(action: toggleWatched) {
+                    Image(systemName: watched ? "checkmark.circle.fill" : "checkmark.circle")
+                        .font(.system(size: 26, weight: .regular))
+                        .foregroundStyle(watched ? app.accent : .white.opacity(0.55))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Circle())
+                        .symbolEffect(.bounce, value: watched)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(watched ? "Episodio visto" : "Segna episodio come visto")
+            }
             if let overview = episode.overview, !overview.isEmpty {
                 Text(overview).font(.caption).foregroundStyle(Theme.secondaryText).lineLimit(3)
             }
         }
         .padding(10)
-        .liquidGlassCard(radius: 20)
+        .liquidGlassCard(radius: 20, tint: watched ? app.accent.opacity(0.18) : nil)
+        .opacity(watched ? 0.85 : 1)
     }
 }
 

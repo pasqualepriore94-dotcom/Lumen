@@ -46,6 +46,26 @@ struct WatchedEntry: Codable, Identifiable, Hashable {
     }
 }
 
+/// Un episodio segnato come visto.
+struct EpisodeWatch: Codable, Hashable {
+    var minutes: Int
+    var label: String
+    var estimated: Bool
+    var date: Date
+}
+
+/// Episodi visti di una serie.
+struct SeriesWatch: Codable, Hashable, Identifiable {
+    var id: String { item.id }
+    var item: MediaItem
+    var episodes: [String: EpisodeWatch]
+    var totalEpisodes: Int
+    var updated: Date
+
+    var minutes: Int { episodes.values.reduce(0) { $0 + $1.minutes } }
+    var estimated: Bool { episodes.values.contains { $0.estimated } }
+}
+
 struct WatchTotals {
     var movies = 0
     var movieMinutes = 0
@@ -63,11 +83,13 @@ final class Library {
         static let list = "lumen.myList"
         static let progress = "lumen.progress"
         static let watched = "lumen.watched"
+        static let series = "lumen.seriesWatch"
     }
 
     private(set) var myList: [MediaItem] = []
     private(set) var progress: [String: WatchProgress] = [:]
     private(set) var watched: [String: WatchedEntry] = [:]
+    private(set) var seriesWatch: [String: SeriesWatch] = [:]
 
     init() {
         let d = UserDefaults.standard
@@ -82,6 +104,53 @@ final class Library {
            let w = try? JSONDecoder().decode([String: WatchedEntry].self, from: data) {
             watched = w
         }
+        if let data = d.data(forKey: Keys.series),
+           let sw = try? JSONDecoder().decode([String: SeriesWatch].self, from: data) {
+            seriesWatch = sw
+        }
+    }
+
+    // MARK: Episodi visti
+
+    static func minutes(for episode: Episode, detail: MediaDetail?) -> (Int, Bool) {
+        let m = (episode.duration ?? 0) / 60
+        if m > 0 { return (m, false) }
+        let fallback = (detail?.duration ?? 0) / 60
+        return (fallback > 0 ? fallback : 45, true)
+    }
+
+    func isEpisodeWatched(seriesId: String, episodeId: String) -> Bool {
+        seriesWatch[seriesId]?.episodes[episodeId] != nil
+    }
+
+    func watchedEpisodeCount(seriesId: String) -> Int {
+        seriesWatch[seriesId]?.episodes.count ?? 0
+    }
+
+    /// Segna o toglie un gruppo di episodi (uno, una stagione o tutta la serie).
+    func setEpisodes(_ list: [Episode], watched isWatched: Bool, item: MediaItem, detail: MediaDetail?) {
+        var entry = seriesWatch[item.id] ?? SeriesWatch(item: item, episodes: [:], totalEpisodes: 0, updated: Date())
+        entry.item = item
+        entry.totalEpisodes = detail?.seasons.reduce(0) { $0 + $1.episodes.count } ?? entry.totalEpisodes
+        for e in list {
+            if isWatched {
+                let (m, estimated) = Self.minutes(for: e, detail: detail)
+                entry.episodes[e.id] = EpisodeWatch(minutes: m, label: detail?.label(for: e) ?? e.title,
+                                                    estimated: estimated, date: Date())
+            } else {
+                entry.episodes[e.id] = nil
+            }
+        }
+        entry.updated = Date()
+        seriesWatch[item.id] = entry.episodes.isEmpty ? nil : entry
+        // La vecchia spunta "serie intera" viene sostituita dal conteggio per episodio.
+        watched[item.id] = nil
+        save()
+    }
+
+    func toggleEpisode(_ episode: Episode, item: MediaItem, detail: MediaDetail?) {
+        let now = !isEpisodeWatched(seriesId: item.id, episodeId: episode.id)
+        setEpisodes([episode], watched: now, item: item, detail: detail)
     }
 
     // MARK: Visti
@@ -96,14 +165,23 @@ final class Library {
 
     func unmarkWatched(_ id: String) {
         watched[id] = nil
+        seriesWatch[id] = nil
         save()
     }
 
-    var watchedList: [WatchedEntry] { watched.values.sorted { $0.date > $1.date } }
+    /// Film visti + serie con almeno un episodio visto (e vecchie spunte "serie intera").
+    var watchedList: [WatchedEntry] {
+        var list = Array(watched.values.filter { seriesWatch[$0.id] == nil })
+        list += seriesWatch.values.map {
+            WatchedEntry(item: $0.item, minutes: $0.minutes, episodes: $0.episodes.count,
+                         estimated: $0.estimated, date: $0.updated)
+        }
+        return list.sorted { $0.date > $1.date }
+    }
 
     var totals: WatchTotals {
         var t = WatchTotals()
-        for e in watched.values {
+        for e in watchedList {
             if e.isSeries {
                 t.series += 1; t.seriesMinutes += e.minutes; t.episodes += e.episodes
             } else {
@@ -161,5 +239,6 @@ final class Library {
         if let data = try? JSONEncoder().encode(myList) { d.set(data, forKey: Keys.list) }
         if let data = try? JSONEncoder().encode(progress) { d.set(data, forKey: Keys.progress) }
         if let data = try? JSONEncoder().encode(watched) { d.set(data, forKey: Keys.watched) }
+        if let data = try? JSONEncoder().encode(seriesWatch) { d.set(data, forKey: Keys.series) }
     }
 }

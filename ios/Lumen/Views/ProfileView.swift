@@ -9,6 +9,7 @@ struct ProfileView: View {
     @State private var confirmLogout = false
     @State private var showWatchTime = false
     @State private var showIconPicker = false
+    @State private var showTheme = false
 
     private var version: String {
         let v = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
@@ -65,6 +66,7 @@ struct ProfileView: View {
         .sheet(isPresented: $showPassword) { ChangePasswordSheet() }
         .sheet(isPresented: $showWatchTime) { WatchTimeView() }
         .sheet(isPresented: $showIconPicker) { AppIconPicker() }
+        .sheet(isPresented: $showTheme) { ThemePicker() }
         .confirmationDialog("Vuoi uscire dall'account?", isPresented: $confirmLogout, titleVisibility: .visible) {
             Button("Esci", role: .destructive) { auth.signOut() }
         }
@@ -153,6 +155,11 @@ struct ProfileView: View {
                 }
                 .buttonStyle(.plain)
                 divider
+                Button { showTheme = true } label: {
+                    row(icon: "paintpalette.fill", title: "Tema", value: themeName)
+                }
+                .buttonStyle(.plain)
+                divider
                 Button { showIconPicker = true } label: {
                     row(icon: "app.badge", title: "Icona dell'app", value: nil)
                 }
@@ -176,6 +183,11 @@ struct ProfileView: View {
             .liquidGlassCard(radius: 24)
             .padding(.horizontal, 16)
         }
+    }
+
+    private var themeName: String {
+        guard let hex = app.userAccentHex?.uppercased() else { return "Predefinito" }
+        return ThemePicker.presets.first { $0.hex == hex }?.name ?? "Personalizzato"
     }
 
     private var divider: some View {

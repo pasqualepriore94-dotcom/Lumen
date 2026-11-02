@@ -105,7 +105,15 @@ final class AppState {
     /// Chiave da usare in `.task(id:)` per ricaricare quando cambia la sorgente.
     var contentKey: String { "\(activeProviderConfig?.id ?? "none")|\(reloadToken.uuidString)" }
 
-    var accent: Color { Color(hex: config.accentHex) ?? Color(red: 0.49, green: 0.36, blue: 1) }
+    /// Tema scelto dall'utente su questo dispositivo (nil = colore predefinito dell'amministratore).
+    var userAccentHex: String? = UserDefaults.standard.string(forKey: "lumen.userAccent") {
+        didSet { UserDefaults.standard.set(userAccentHex, forKey: "lumen.userAccent") }
+    }
+
+    var accent: Color {
+        if let user = userAccentHex, let c = Color(hex: user) { return c }
+        return Color(hex: config.accentHex) ?? Color(red: 0.49, green: 0.36, blue: 1)
+    }
 
     func setActiveProvider(_ id: String) {
         config.activeProviderId = id

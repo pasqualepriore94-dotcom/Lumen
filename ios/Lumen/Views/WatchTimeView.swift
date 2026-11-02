@@ -242,9 +242,139 @@ struct AppIconPicker: View {
                     errorMessage = "Impossibile cambiare icona: \(error.localizedDescription)"
                 } else {
                     withAnimation { current = option.rawValue }
+                    AppIconMemory.save(option)
                     errorMessage = nil
                 }
             }
         }
+    }
+}
+
+// MARK: - Tema
+
+struct ThemePreset: Identifiable {
+    let id: String
+    let name: String
+    let hex: String
+}
+
+/// Scelta del colore principale dell'app, salvata su questo dispositivo.
+struct ThemePicker: View {
+    @Environment(AppState.self) private var app
+    @Environment(\.dismiss) private var dismiss
+
+    static let presets: [ThemePreset] = [
+        .init(id: "viola", name: "Viola", hex: "#7C5CFF"),
+        .init(id: "rubino", name: "Rubino", hex: "#FF3B5C"),
+        .init(id: "blu", name: "Blu", hex: "#3D8BFF"),
+        .init(id: "ciano", name: "Ciano", hex: "#22C7E8"),
+        .init(id: "verde", name: "Smeraldo", hex: "#2BD38B"),
+        .init(id: "oro", name: "Oro", hex: "#F5B83D"),
+        .init(id: "arancio", name: "Tramonto", hex: "#FF7A3D"),
+        .init(id: "rosa", name: "Rosa", hex: "#FF4FB8"),
+    ]
+
+    private var selectedHex: String? { app.userAccentHex?.uppercased() }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // anteprima
+                    VStack(spacing: 12) {
+                        LogoMark(size: 56)
+                        HStack(spacing: 10) {
+                            Text("Riproduci").font(.subheadline.bold()).padding(.horizontal, 18).padding(.vertical, 10)
+                                .liquidGlassCapsule(tint: app.accent)
+                            Text("La mia lista").font(.subheadline.bold()).padding(.horizontal, 18).padding(.vertical, 10)
+                                .liquidGlassCapsule()
+                        }
+                        Capsule().fill(app.accent).frame(width: 160, height: 4)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 22)
+                    .liquidGlassCard(radius: 28)
+
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 4), spacing: 18) {
+                        ForEach(Self.presets) { p in
+                            Button { select(p.hex) } label: {
+                                VStack(spacing: 8) {
+                                    Circle()
+                                        .fill(LinearGradient(colors: [Color(hex: p.hex) ?? .purple, (Color(hex: p.hex) ?? .purple).opacity(0.6)],
+                                                             startPoint: .topLeading, endPoint: .bottomTrailing))
+                                        .frame(width: 52, height: 52)
+                                        .overlay(Circle().stroke(.white, lineWidth: selectedHex == p.hex ? 3 : 0))
+                                        .overlay {
+                                            if selectedHex == p.hex {
+                                                Image(systemName: "checkmark").font(.headline.bold())
+                                            }
+                                        }
+                                        .shadow(color: (Color(hex: p.hex) ?? .clear).opacity(0.6), radius: 10)
+                                    Text(p.name).font(.caption)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(16)
+                    .liquidGlassCard(radius: 28)
+
+                    VStack(spacing: 0) {
+                        ColorPicker("Colore personalizzato", selection: Binding(
+                            get: { app.accent },
+                            set: { app.userAccentHex = $0.hexString }), supportsOpacity: false)
+                            .padding(.horizontal, 16).frame(height: 52)
+                        Rectangle().fill(.white.opacity(0.08)).frame(height: 0.5)
+                        Button {
+                            withAnimation { app.userAccentHex = nil }
+                        } label: {
+                            HStack {
+                                Text("Usa il colore predefinito")
+                                Spacer()
+                                if app.userAccentHex == nil { Image(systemName: "checkmark").foregroundStyle(app.accent) }
+                            }
+                            .padding(.horizontal, 16).frame(height: 52)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .liquidGlassCard(radius: 22)
+
+                    Text("Il tema viene salvato su questo iPhone e resta anche dopo gli aggiornamenti dell'app.")
+                        .font(.caption).foregroundStyle(Theme.secondaryText).multilineTextAlignment(.center)
+                }
+                .padding(16)
+            }
+            .foregroundStyle(.white)
+            .background(AuroraBackground(accent: app.accent).opacity(0.6))
+            .navigationTitle("Tema")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fine") { dismiss() } } }
+            .animation(.snappy, value: app.userAccentHex)
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private func select(_ hex: String) {
+        app.userAccentHex = hex
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+}
+
+/// Riapplica l'icona scelta se una reinstallazione l'ha riportata a quella predefinita.
+enum AppIconMemory {
+    static let key = "lumen.iconChoice"
+
+    static func save(_ option: AppIconOption) {
+        UserDefaults.standard.set(option.rawValue, forKey: key)
+    }
+
+    @MainActor
+    static func restoreIfNeeded() {
+        guard let saved = UserDefaults.standard.string(forKey: key),
+              UIApplication.shared.supportsAlternateIcons else { return }
+        let current = UIApplication.shared.alternateIconName ?? ""
+        guard saved != current else { return }
+        UIApplication.shared.setAlternateIconName(saved.isEmpty ? nil : saved) { _ in }
     }
 }

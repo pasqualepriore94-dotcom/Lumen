@@ -114,7 +114,10 @@ struct RootView: View {
                 .animation(.spring(response: 0.4, dampingFraction: 0.8), value: updates.showBanner)
         }
         .playbackHUD()
-        .onAppear { KeyboardDismisser.shared.install() }
+        .onAppear {
+            KeyboardDismisser.shared.install()
+            AppIconMemory.restoreIfNeeded()
+        }
     }
 }
 
