@@ -280,6 +280,10 @@ struct StreamSource: Decodable, Hashable {
 
     enum CodingKeys: String, CodingKey { case url, quality, headers }
 
+    init(url: URL, quality: String? = nil, headers: [String: String]? = nil) {
+        self.url = url; self.quality = quality; self.headers = headers
+    }
+
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         guard let url = c.lossyURL(.url) else {

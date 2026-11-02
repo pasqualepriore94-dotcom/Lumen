@@ -160,7 +160,7 @@ final class DownloadManager: NSObject {
 
     /// Scarica il video (film o episodio) dalla sorgente attiva.
     func download(item: MediaItem, episode: Episode?, episodeLabel: String?, detail: MediaDetail?,
-                  provider: ContentProvider) async {
+                  provider: ContentProvider?, directURL: URL? = nil) async {
         let key = DownloadRecord.key(itemId: item.id, episodeId: episode?.id)
         if let existing = records[key], existing.state == .downloading || existing.state == .done { return }
         var record = DownloadRecord(id: key, item: item, episodeId: episode?.id, episodeLabel: episodeLabel,
@@ -170,8 +170,17 @@ final class DownloadManager: NSObject {
         if let detail { await saveInfo(item: item, detail: detail); records[key] = record }
 
         do {
-            let sources = try await provider.streams(id: item.id, episodeId: episode?.id)
-            guard let source = sources.first else { throw ProviderError.noStreams }
+            let source: StreamSource
+            if let directURL {
+                // Video da link abbinato al catalogo
+                source = StreamSource(url: directURL)
+            } else {
+                guard let provider,
+                      let first = try await provider.streams(id: item.id, episodeId: episode?.id).first else {
+                    throw ProviderError.noStreams
+                }
+                source = first
+            }
             let isHLS = source.url.pathExtension.lowercased() == "m3u8" || source.url.absoluteString.contains(".m3u8")
             record.isHLS = isHLS
             record.state = .downloading
@@ -298,7 +307,12 @@ extension DownloadManager: URLSessionDownloadDelegate, AVAssetDownloadDelegate {
         // Il file temporaneo va spostato prima che il metodo ritorni.
         let temp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? FileManager.default.moveItem(at: location, to: temp)
-        let name = downloadTask.response?.suggestedFilename
+        var name = downloadTask.response?.suggestedFilename
+        // Se il server non indica il nome, usa l'estensione dell'indirizzo (es. .mkv)
+        if (name as NSString?)?.pathExtension.isEmpty ?? true,
+           let ext = downloadTask.originalRequest?.url?.pathExtension, !ext.isEmpty {
+            name = "video.\(ext)"
+        }
         MainActor.assumeIsolated { finishFile(key: key, temp: temp, suggestedName: name) }
     }
 

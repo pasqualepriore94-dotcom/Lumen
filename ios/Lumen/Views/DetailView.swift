@@ -474,7 +474,7 @@ struct DetailView: View {
             ForEach(seasons[index].episodes) { episode in
                 EpisodeRow(episode: episode, fallbackImage: current.bestWideImage,
                            playable: canStream || episodeLink(episode, in: detail) != nil,
-                           download: canStream ? downloads.record(itemId: current.id, episodeId: episode.id) : nil,
+                           download: downloads.record(itemId: current.id, episodeId: episode.id),
                            onDownload: episodeDownloadAction(episode, detail: detail),
                            watched: library.isEpisodeWatched(seriesId: current.id, episodeId: episode.id),
                            toggleWatched: {
@@ -540,8 +540,11 @@ struct DetailView: View {
 
     // MARK: Download
 
+    private var seriesHasLinks: Bool { current.isSeries && links.hasLinks(seriesId: current.id) }
+
     private func episodeDownloadAction(_ episode: Episode, detail: MediaDetail) -> (() -> Void)? {
-        guard canStream else { return nil }
+        let link = canStream ? nil : episodeLink(episode, in: detail)
+        guard canStream || link != nil else { return nil }
         return {
             if let r = downloads.record(itemId: current.id, episodeId: episode.id), r.state != .failed {
                 downloads.remove(r.id)
@@ -550,7 +553,7 @@ struct DetailView: View {
                 Task {
                     await downloads.download(item: current, episode: episode,
                                              episodeLabel: detail.label(for: episode), detail: detail,
-                                             provider: app.provider)
+                                             provider: canStream ? app.provider : nil, directURL: link?.url)
                 }
             }
         }
@@ -567,7 +570,11 @@ struct DetailView: View {
         case .downloading?: icon = "arrow.down.circle.dotted"; title = "\(Int((record?.progress ?? 0) * 100))%"
         case .waiting?: icon = "clock"; title = "In attesa"
         case .saved?: icon = "checkmark.circle.fill"; title = "Salvato"
-        default: icon = "arrow.down.circle"; title = canStream ? "Scarica" : "Salva offline"
+        default:
+            icon = "arrow.down.circle"
+            if canStream || movieLink != nil { title = "Scarica" }
+            else if seriesHasLinks { title = "Scarica episodi" }
+            else { title = "Salva offline" }
         }
         return Button {
             if let record, record.state != .failed {
@@ -577,7 +584,19 @@ struct DetailView: View {
             guard let detail else { return }
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
             Task {
-                if canStream && !current.isSeries {
+                if let link = movieLink {
+                    // Film disponibile da link: si scarica il video, non solo la scheda.
+                    await downloads.download(item: current, episode: nil, episodeLabel: nil, detail: detail,
+                                             provider: nil, directURL: link.url)
+                } else if seriesHasLinks {
+                    // Serie: scarica tutti gli episodi disponibili da link.
+                    for e in detail.seasons.flatMap(\.episodes) {
+                        guard let link = episodeLink(e, in: detail),
+                              downloads.record(itemId: current.id, episodeId: e.id) == nil else { continue }
+                        await downloads.download(item: current, episode: e, episodeLabel: detail.label(for: e),
+                                                 detail: detail, provider: nil, directURL: link.url)
+                    }
+                } else if canStream && !current.isSeries {
                     await downloads.download(item: current, episode: nil, episodeLabel: nil, detail: detail,
                                              provider: app.provider)
                 } else {
