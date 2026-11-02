@@ -7,6 +7,7 @@ struct LumenApp: App {
     @State private var library = Library()
     @State private var auth = AuthStore()
     @State private var updates = UpdateChecker()
+    @State private var showSplash = true
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -31,6 +32,13 @@ struct LumenApp: App {
                 }
             }
             .animation(.easeInOut(duration: 0.35), value: auth.isLoggedIn)
+            .overlay {
+                if showSplash {
+                    SplashView { withAnimation(.easeOut(duration: 0.3)) { showSplash = false } }
+                        .transition(.opacity)
+                        .zIndex(10)
+                }
+            }
             .environment(app)
             .environment(library)
             .environment(auth)
