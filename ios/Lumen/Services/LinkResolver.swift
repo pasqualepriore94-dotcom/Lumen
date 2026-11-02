@@ -344,6 +344,25 @@ final class LinkLibrary {
         saveMatches()
     }
 
+    /// Rimuove tutti i contenuti (dirette, film, episodi) che puntano a questi indirizzi.
+    func removeLinks(_ ids: Set<String>) {
+        guard !ids.isEmpty else { return }
+        items.removeAll { ids.contains($0.id) }
+        movieLinks = movieLinks.filter { !ids.contains($0.value.id) }
+        for (k, v) in episodeLinks { episodeLinks[k] = v.filter { !ids.contains($0.value.id) } }
+        episodeLinks = episodeLinks.filter { !$0.value.isEmpty }
+        matchedItems = matchedItems.filter { movieLinks[$0.key] != nil || episodeLinks[$0.key] != nil }
+        save()
+        saveMatches()
+    }
+
+    /// Quanti contenuti importati provengono da questi indirizzi.
+    func importedCount(_ ids: Set<String>) -> Int {
+        items.filter { ids.contains($0.id) }.count
+            + movieLinks.values.filter { ids.contains($0.id) }.count
+            + episodeLinks.values.reduce(0) { $0 + $1.values.filter { ids.contains($0.id) }.count }
+    }
+
     func removeAll() {
         items = []; movieLinks = [:]; episodeLinks = [:]; matchedItems = [:]
         save(); saveMatches()

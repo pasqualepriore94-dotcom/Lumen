@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// Pannello amministratore → "Aggiungi da link": incolla un link, l'app divide film, serie e dirette,
 /// li abbina per nome al catalogo e ti propone cosa importare.
@@ -20,6 +21,16 @@ struct LinkImportView: View {
     @State private var selSeries = Set<String>()
     @State private var selLives = Set<String>()
     @State private var onlyMatched = false
+    @State private var playlists = PlaylistStore.shared
+    @State private var pickingFile = false
+    @State private var showPlaylists = false
+    @State private var currentPlaylist: String?
+
+    private static let playlistTypes: [UTType] = {
+        var t: [UTType] = [.m3uPlaylist, .plainText, .text, .data]
+        for ext in ["m3u", "m3u8"] { if let u = UTType(filenameExtension: ext) { t.insert(u, at: 0) } }
+        return t
+    }()
 
     private var tmdb: TMDBProvider? {
         app.config.providers.first { $0.type == .tmdb && $0.isUsable }.map { TMDBProvider(config: $0) }
@@ -45,6 +56,9 @@ struct LinkImportView: View {
             }
 
             Section {
+                Button { showPlaylists = true } label: {
+                    Label("Playlist M3U caricate (\(playlists.playlists.count))", systemImage: "music.note.list")
+                }
                 NavigationLink {
                     LinkedContentView()
                 } label: {
@@ -69,7 +83,18 @@ struct LinkImportView: View {
         .onAppear {
             if input.isEmpty, let s = UIPasteboard.general.string, s.lowercased().hasPrefix("http") { input = s }
         }
-        .onDisappear { mapper.cancel() }
+        .onDisappear { if !showPlaylists { mapper.cancel() } }
+        .fileImporter(isPresented: $pickingFile, allowedContentTypes: Self.playlistTypes, allowsMultipleSelection: false) { result in
+            loadFile(result)
+        }
+        .navigationDestination(isPresented: $showPlaylists) {
+            PlaylistsView { p, list in
+                showPlaylists = false
+                currentPlaylist = p.name
+                message = "Playlist \"\(p.name)\": \(list.count) voci."
+                analyzeMedia(list)
+            }
+        }
     }
 
     private var hasResults: Bool { !mapper.movies.isEmpty || !mapper.series.isEmpty || !mapper.lives.isEmpty }
@@ -98,10 +123,14 @@ struct LinkImportView: View {
                 }
             }
             .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty || analyzing || mapper.isMapping)
+            Button { pickingFile = true } label: {
+                Label("Carica file .m3u dal telefono", systemImage: "doc.badge.plus")
+            }
+            .disabled(analyzing || mapper.isMapping)
         } header: {
-            Text("Link")
+            Text("Link o file")
         } footer: {
-            Text("Riconosce video MP4/MKV/MOV, flussi HLS, playlist M3U, API nel formato Lumen e pagine che pubblicano il video in modo aperto. Usa solo contenuti che hai il diritto di guardare.")
+            Text("Riconosce video MP4/MKV/MOV, flussi HLS, playlist M3U (da link o da file), API nel formato Lumen e pagine che pubblicano il video in modo aperto. Le playlist vengono salvate in \"Playlist M3U caricate\". Usa solo contenuti che hai il diritto di guardare.")
         }
     }
 
@@ -376,13 +405,16 @@ struct LinkImportView: View {
             analyzing = false
             switch result {
             case .media(let list):
-                Task {
-                    await mapper.prepare(list, tmdb: tmdb)
-                    // Pre-selezione: film e serie trovati nel catalogo.
-                    selMovies = Set(mapper.movies.filter { $0.match != nil }.map(\.id))
-                    selSeries = Set(mapper.series.filter { $0.match != nil }.map(\.id))
+                // Le playlist prese da link vengono salvate, così si possono aggiornare o eliminare.
+                if list.count > 1, list.allSatisfy({ $0.source == "Playlist" }),
+                   let url = LinkResolver.normalize(text) {
+                    var request = URLRequest(url: url, timeoutInterval: 30)
+                    request.setValue("Lumen", forHTTPHeaderField: "User-Agent")
+                    if let pair = try? await URLSession.shared.data(for: request), let body = PlaylistStore.decode(pair.0) {
+                        playlists.save(name: url.host ?? "Playlist", origin: url.absoluteString, text: body)
+                    }
                 }
-                tab = 0
+                analyzeMedia(list)
             case .provider(let base, let titles):
                 providerBase = base
                 providerTitles = titles
@@ -390,5 +422,41 @@ struct LinkImportView: View {
                 message = why
             }
         }
+    }
+
+    private func analyzeMedia(_ list: [LinkMedia]) {
+        mapper.reset()
+        selMovies = []; selSeries = []; selLives = []
+        providerBase = nil
+        tab = 0
+        guard !list.isEmpty else { message = "La playlist non contiene voci riproducibili."; return }
+        Task {
+            await mapper.prepare(list, tmdb: tmdb)
+            // Pre-selezione: film e serie trovati nel catalogo.
+            selMovies = Set(mapper.movies.filter { $0.match != nil }.map(\.id))
+            selSeries = Set(mapper.series.filter { $0.match != nil }.map(\.id))
+        }
+    }
+
+    private func loadFile(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result, let url = urls.first else {
+            if case .failure(let e) = result { message = "Impossibile aprire il file: \(e.localizedDescription)" }
+            return
+        }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url), let text = PlaylistStore.decode(data) else {
+            message = "Impossibile leggere il file."
+            return
+        }
+        guard text.contains("#EXTINF") || text.hasPrefix("#EXTM3U") || text.contains("://") else {
+            message = "Il file non sembra una playlist M3U."
+            return
+        }
+        let name = url.deletingPathExtension().lastPathComponent
+        let (saved, list) = playlists.save(name: name, origin: "File: " + url.lastPathComponent, text: text)
+        currentPlaylist = saved.name
+        message = "File \"\(url.lastPathComponent)\": \(saved.entries) voci (\(saved.vods) on demand, \(saved.lives) dirette). Salvato in Playlist M3U."
+        analyzeMedia(list)
     }
 }
