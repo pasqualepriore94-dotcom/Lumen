@@ -65,11 +65,21 @@ struct MediaItem: Codable, Identifiable, Hashable {
     }
 }
 
+/// Interrogazione che ha generato una riga della home (percorso API e parametri).
+struct SectionSource: Hashable {
+    var path: String
+    var query: [String: String] = [:]
+    var kind: MediaKind?
+    var badge: String?
+}
+
 struct CatalogSection: Decodable, Identifiable {
     var id: String
     var title: String
     var style: String?
     var items: [MediaItem]
+    /// Da dove arriva la riga: permette "Mostra tutto" con il catalogo completo della categoria.
+    var source: SectionSource? = nil
 
     enum CodingKeys: String, CodingKey { case id, title, style, items }
 

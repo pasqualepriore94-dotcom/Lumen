@@ -61,7 +61,9 @@ struct TMDBProvider: ContentProvider {
                     if spec.style == "top10" { items = items.enumerated().map { var i = $0.element; i.rank = $0.offset + 1; return i } }
                     if let badge = spec.badge { items = items.map { var i = $0; i.badge = badge; return i } }
                     guard !items.isEmpty else { return nil }
-                    return (index, CatalogSection(id: spec.id, title: spec.title, style: spec.style, items: items))
+                    var section = CatalogSection(id: spec.id, title: spec.title, style: spec.style, items: items)
+                    section.source = SectionSource(path: spec.path, query: spec.query, kind: spec.kind, badge: spec.badge)
+                    return (index, section)
                 }
             }
             var out: [(Int, CatalogSection)] = []
@@ -72,6 +74,21 @@ struct TMDBProvider: ContentProvider {
         guard !sections.isEmpty else { throw TMDBError.unreachable }
         let hero = sections.first?.items.first { $0.backdrop != nil }
         return HomeFeed(hero: hero, sections: sections)
+    }
+
+    /// Una pagina del catalogo completo di una categoria della home ("Mostra tutto").
+    func sectionPage(_ source: SectionSource, page: Int) async throws -> BrowsePage {
+        guard !key.isEmpty else { throw TMDBError.missingKey }
+        let genres = try await genreMap()
+        var query = source.query
+        query["page"] = String(page)
+        if source.path.hasPrefix("/discover") { query["include_adult"] = "false" }
+        let json = try await get(source.path, query)
+        let list = json["results"] as? [[String: Any]] ?? []
+        let total = min(500, json["total_pages"] as? Int ?? page)
+        var items = list.compactMap { item(from: $0, kind: source.kind, genres: genres) }.filter { $0.poster != nil }
+        if let badge = source.badge { items = items.map { var i = $0; i.badge = badge; return i } }
+        return BrowsePage(items: items, page: page, totalPages: total)
     }
 
     // MARK: Ricerca

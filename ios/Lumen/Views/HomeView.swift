@@ -227,12 +227,14 @@ struct HeroCard: View {
 
 struct SectionRow: View {
     let section: CatalogSection
+    @State private var showAll = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(title: section.title)
+            SectionHeader(title: section.title, actionTitle: "Mostra tutto") { showAll = true }
             PosterRow(items: section.items, layout: section.layout)
         }
+        .sheet(isPresented: $showAll) { SectionGridView(section: section) }
     }
 }
 
