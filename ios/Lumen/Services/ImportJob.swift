@@ -76,7 +76,8 @@ final class ImportJob {
         begin(name: name, app: app)
         input = list
         phase = .mapping
-        persist()
+        saveInput()
+        persist(force: true)
         run()
     }
 
@@ -97,7 +98,7 @@ final class ImportJob {
 
     /// Riprende un lavoro interrotto (app sospesa o chiusa). Da chiamare quando l'app torna attiva.
     func resumeIfNeeded(app: AppState) {
-        guard isRunning, task == nil || paused else { return }
+        guard restored, isRunning, task == nil || paused else { return }
         if tmdbConfig == nil { tmdbConfig = app.config.providers.first { $0.type == .tmdb && $0.isUsable } }
         paused = false
         run()
@@ -137,13 +138,13 @@ final class ImportJob {
                 guard phase == .mapping else { finishWithoutResults(); return }
             }
             await mapper.prepare(input, tmdb: tmdb)
-            if paused || Task.isCancelled { persist(); return }
+            if paused || Task.isCancelled { persist(force: true); return }
             if tmdb != nil && !mapper.isComplete {
                 // Alcune ricerche non sono riuscite (rete): riprova una volta dopo una breve attesa.
                 try? await Task.sleep(for: .seconds(3))
-                if paused || Task.isCancelled { persist(); return }
+                if paused || Task.isCancelled { persist(force: true); return }
                 await mapper.prepare(input, tmdb: tmdb)
-                if paused || Task.isCancelled { persist(); return }
+                if paused || Task.isCancelled { persist(force: true); return }
             }
             finish()
         }
@@ -163,7 +164,8 @@ final class ImportJob {
             }
             input = list
             phase = .mapping
-            persist()
+            saveInput()
+            persist(force: true)
         case .provider(let base, let titles):
             providerBase = base
             providerTitles = titles
@@ -187,7 +189,7 @@ final class ImportJob {
         selMovies = Set(mapper.movies.filter { $0.match != nil }.map(\.id))
         selSeries = Set(mapper.series.filter { $0.match != nil }.map(\.id))
         unseen = true
-        persist()
+        persist(force: true)
         BackgroundRunner.shared.end(success: true)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         notifyFinished()
@@ -199,13 +201,13 @@ final class ImportJob {
         mapper.cancel()
         task?.cancel()
         task = nil
-        persist()
+        persist(force: true)
         BackgroundRunner.shared.end(success: false)
     }
 
     private func progressTick() {
         BackgroundRunner.shared.update(done: mapper.done, total: mapper.total, subtitle: statusText)
-        if mapper.done % 100 == 0 { persist() }
+        persist()
     }
 
     // MARK: Notifiche
@@ -225,51 +227,121 @@ final class ImportJob {
     }
 
     // MARK: Salvataggio (per riprendere anche se l'app viene chiusa)
+    // Tre file: stato (piccolo, salvato spesso), elenco voci (una volta) e ricerche già fatte
+    // (salvate al massimo ogni minuto, fuori dal thread principale: con decine di migliaia di voci
+    // salvare tutto a ogni passo rallenterebbe l'analisi).
 
-    private struct Saved: Codable {
+    private struct State: Codable {
+        var version = 2
+        var phase: Phase
+        var sourceName: String
+        var linkText: String?
+        var selMovies: Set<String>
+        var selSeries: Set<String>
+        var unseen: Bool
+        var tmdbConfig: ProviderConfig?
+    }
+
+    /// Formato della versione 0.11.0 (tutto in un file).
+    private struct LegacySaved: Decodable {
         var phase: Phase
         var sourceName: String
         var linkText: String?
         var input: [LinkMedia]
-        var movies: [MovieProposal]
-        var series: [SeriesProposal]
-        var lives: [LinkMedia]
         var cache: [String: CachedMatch]
         var selMovies: Set<String>
         var selSeries: Set<String>
         var unseen: Bool
     }
 
-    private static var file: URL {
+    private struct Loaded {
+        var state: State
+        var input: [LinkMedia]
+        var cache: [String: CachedMatch]
+        var legacy: Bool
+    }
+
+    @ObservationIgnored private var lastCacheSave = Date.distantPast
+    @ObservationIgnored private var restored = false
+
+    nonisolated private static var folder: URL {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("import-job.json")
+        return dir
+    }
+    nonisolated private static var stateFile: URL { folder.appendingPathComponent("import-job.json") }
+    nonisolated private static var inputFile: URL { folder.appendingPathComponent("import-input.json") }
+    nonisolated private static var cacheFile: URL { folder.appendingPathComponent("import-cache.json") }
+
+    private func persist(force: Bool = false) {
+        let state = State(phase: phase, sourceName: sourceName, linkText: linkText, selMovies: selMovies,
+                          selSeries: selSeries, unseen: unseen, tmdbConfig: tmdbConfig)
+        if let data = try? JSONEncoder().encode(state) { try? data.write(to: Self.stateFile, options: .atomic) }
+        if force || Date().timeIntervalSince(lastCacheSave) > 60 {
+            lastCacheSave = Date()
+            let cache = mapper.cache
+            let url = Self.cacheFile
+            Task.detached(priority: .utility) {
+                if let data = try? JSONEncoder().encode(cache) { try? data.write(to: url, options: .atomic) }
+            }
+        }
     }
 
-    private func persist() {
-        let s = Saved(phase: phase, sourceName: sourceName, linkText: linkText, input: input,
-                      movies: mapper.movies, series: mapper.series, lives: mapper.lives, cache: mapper.cache,
-                      selMovies: selMovies, selSeries: selSeries, unseen: unseen)
-        if let data = try? JSONEncoder().encode(s) { try? data.write(to: Self.file, options: .atomic) }
+    private func saveInput() {
+        let list = input
+        let url = Self.inputFile
+        Task.detached(priority: .utility) {
+            if let data = try? JSONEncoder().encode(list) { try? data.write(to: url, options: .atomic) }
+        }
     }
 
-    private static func deleteSaved() { try? FileManager.default.removeItem(at: file) }
+    private static func deleteSaved() {
+        for url in [stateFile, inputFile, cacheFile] { try? FileManager.default.removeItem(at: url) }
+    }
+
+    nonisolated private static func load() -> Loaded? {
+        guard let data = try? Data(contentsOf: stateFile) else { return nil }
+        let decoder = JSONDecoder()
+        if let state = try? decoder.decode(State.self, from: data) {
+            let input = (try? Data(contentsOf: inputFile)).flatMap { try? decoder.decode([LinkMedia].self, from: $0) } ?? []
+            let cache = (try? Data(contentsOf: cacheFile)).flatMap { try? decoder.decode([String: CachedMatch].self, from: $0) } ?? [:]
+            return Loaded(state: state, input: input, cache: cache, legacy: false)
+        }
+        if let old = try? decoder.decode(LegacySaved.self, from: data) {
+            let state = State(phase: old.phase, sourceName: old.sourceName, linkText: old.linkText,
+                              selMovies: old.selMovies, selSeries: old.selSeries, unseen: old.unseen, tmdbConfig: nil)
+            return Loaded(state: state, input: old.input, cache: old.cache, legacy: true)
+        }
+        return nil
+    }
 
     private func restore() {
-        guard let data = try? Data(contentsOf: Self.file), let s = try? JSONDecoder().decode(Saved.self, from: data) else { return }
-        phase = s.phase
-        sourceName = s.sourceName
-        linkText = s.linkText
-        input = s.input
-        mapper.movies = s.movies
-        mapper.series = s.series
-        mapper.lives = s.lives
-        mapper.cache = s.cache
-        selMovies = s.selMovies
-        selSeries = s.selSeries
-        unseen = s.unseen
-        // Un lavoro rimasto a metà riprende appena l'app è attiva.
-        paused = isRunning
+        Task { [weak self] in
+            let loaded = await Task.detached(priority: .userInitiated) { ImportJob.load() }.value
+            guard let self else { return }
+            if let loaded, task == nil, phase == .idle {
+                let s = loaded.state
+                phase = s.phase
+                sourceName = s.sourceName
+                linkText = s.linkText
+                input = loaded.input
+                mapper.cache = loaded.cache
+                selMovies = s.selMovies
+                selSeries = s.selSeries
+                unseen = s.unseen
+                tmdbConfig = s.tmdbConfig
+                if loaded.legacy { saveInput(); persist(force: true) }
+                if phase == .mapping && input.isEmpty { phase = .idle }
+                if phase == .ready { await mapper.rebuild(input) }
+                // Un lavoro rimasto a metà riprende da solo.
+                paused = isRunning
+            }
+            restored = true
+            if isRunning, paused, UIApplication.shared.applicationState == .active {
+                paused = false
+                run()
+            }
+        }
     }
 }
 

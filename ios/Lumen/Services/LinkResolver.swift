@@ -308,9 +308,14 @@ final class LinkLibrary {
     }
 
     private init() {
-        if let data = UserDefaults.standard.data(forKey: key),
+        if let data = try? Data(contentsOf: Self.itemsFile),
            let saved = try? JSONDecoder().decode([LinkMedia].self, from: data) {
             items = saved
+        } else if let data = UserDefaults.standard.data(forKey: key),
+                  let saved = try? JSONDecoder().decode([LinkMedia].self, from: data) {
+            items = saved
+            save()
+            UserDefaults.standard.removeObject(forKey: key)
         }
         if let data = try? Data(contentsOf: Self.matchesFile),
            let m = try? JSONDecoder().decode(Matches.self, from: data) {
@@ -403,6 +408,16 @@ final class LinkLibrary {
         matchedItems.values.filter { $0.isSeries && episodeLinks[$0.id] != nil }.sorted { $0.title < $1.title }
     }
 
+    /// Importazione in blocco: aggiorna tutto e salva una volta sola (adatto a decine di migliaia di voci).
+    func applyBatch(movies: [(LinkMedia, MediaItem)], series: [([String: LinkMedia], MediaItem)], unmatched: [LinkMedia]) {
+        var ml = movieLinks, el = episodeLinks, mi = matchedItems
+        for (media, item) in movies { ml[item.id] = media; mi[item.id] = item }
+        for (eps, item) in series { el[item.id, default: [:]].merge(eps) { _, new in new }; mi[item.id] = item }
+        movieLinks = ml; episodeLinks = el; matchedItems = mi
+        saveMatches()
+        add(unmatched)
+    }
+
     func setMovieLink(_ media: LinkMedia, for item: MediaItem) {
         movieLinks[item.id] = media
         matchedItems[item.id] = item
@@ -459,8 +474,12 @@ final class LinkLibrary {
         }
     }
 
+    private static var itemsFile: URL {
+        matchesFile.deletingLastPathComponent().appendingPathComponent("link-items.json")
+    }
+
     private func save() {
-        if let data = try? JSONEncoder().encode(items) { UserDefaults.standard.set(data, forKey: key) }
+        if let data = try? JSONEncoder().encode(items) { try? data.write(to: Self.itemsFile, options: .atomic) }
     }
 
     private func saveMatches() {

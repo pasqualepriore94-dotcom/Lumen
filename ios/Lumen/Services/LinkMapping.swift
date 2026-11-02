@@ -53,24 +53,31 @@ final class LinkMapper {
 
     func cancel() { cancelled = true; generation += 1; isMapping = false }
 
+    /// Ricerche simultanee sul catalogo (TMDB accetta circa 40 richieste al secondo).
+    static let parallelism = 8
+
     /// true se tutte le ricerche sono state completate (nessuna interrotta o fallita per la rete).
     var isComplete: Bool {
         series.allSatisfy { cache[Self.key(series: $0)] != nil } && movies.allSatisfy { cache[Self.key(movie: $0.parsed)] != nil }
     }
 
-    static func key(series s: SeriesProposal) -> String { "s|\(s.name.lowercased())|\(s.year ?? 0)" }
-    static func key(movie p: ParsedTitle) -> String { "m|\(p.title.lowercased())|\(p.year ?? 0)" }
+    nonisolated static func key(series s: SeriesProposal) -> String { "s|\(s.name.lowercased())|\(s.year ?? 0)" }
+    nonisolated static func key(movie p: ParsedTitle) -> String { "m|\(p.title.lowercased())|\(p.year ?? 0)" }
 
-    /// Divide i contenuti in film / serie / live e cerca ogni titolo nel catalogo.
-    func prepare(_ items: [LinkMedia], tmdb: TMDBProvider?) async {
-        generation += 1
-        let gen = generation
-        cancelled = false
-        lives = items.filter(\.isLive)
+    struct Grouped {
+        var movies: [MovieProposal]
+        var series: [SeriesProposal]
+        var lives: [LinkMedia]
+    }
+
+    /// Divide in film / serie (episodi raggruppati per nome) / dirette. Lavoro solo locale, fuori dal thread principale.
+    nonisolated static func group(_ items: [LinkMedia]) -> Grouped {
         var movieList: [MovieProposal] = []
         var groups: [String: SeriesProposal] = [:]
         var order: [String] = []
-        for m in items where !m.isLive {
+        var lives: [LinkMedia] = []
+        for m in items {
+            if m.isLive { lives.append(m); continue }
             let p = ParsedTitle.parse(m.title)
             if let s = p.season, let e = p.episode {
                 let key = p.title.lowercased().folding(options: [.diacriticInsensitive], locale: nil)
@@ -84,69 +91,105 @@ final class LinkMapper {
                 movieList.append(MovieProposal(media: m, parsed: p))
             }
         }
-        // Applica subito quanto già trovato in precedenza.
-        movies = movieList.map { var m = $0; m.match = cache[Self.key(movie: m.parsed)]?.item; return m }
-        series = order.compactMap { groups[$0] }.map { var s = $0; s.match = cache[Self.key(series: s)]?.item; return s }
+        return Grouped(movies: movieList, series: order.compactMap { groups[$0] }, lives: lives)
+    }
 
-        guard let tmdb else { return }
+    /// Ricostruisce le proposte (senza ricerche in rete) applicando gli abbinamenti già trovati.
+    func rebuild(_ items: [LinkMedia]) async {
+        let grouped = await Task.detached(priority: .userInitiated) { Self.group(items) }.value
+        apply(grouped)
+    }
+
+    private func apply(_ g: Grouped) {
+        let c = cache
+        lives = g.lives
+        movies = g.movies.map { var m = $0; m.match = c[Self.key(movie: m.parsed)]?.item; return m }
+        series = g.series.map { var s = $0; s.match = c[Self.key(series: s)]?.item; return s }
+    }
+
+    private struct Query: Sendable {
+        var key: String
+        var title: String
+        var year: Int?
+        var series: Bool
+    }
+
+    private enum Lookup {
+        case found(MediaItem?)
+        case failed
+    }
+
+    nonisolated private static func lookup(_ q: Query, _ tmdb: TMDBProvider) async -> (String, Lookup) {
+        do {
+            return (q.key, .found(try await tmdb.match(title: q.title, year: q.year, series: q.series)))
+        } catch {
+            return (q.key, .failed)
+        }
+    }
+
+    /// Divide i contenuti e cerca nel catalogo ogni titolo diverso una sola volta, con più ricerche in parallelo.
+    func prepare(_ items: [LinkMedia], tmdb: TMDBProvider?) async {
+        generation += 1
+        let gen = generation
+        cancelled = false
+        let grouped = await Task.detached(priority: .userInitiated) { Self.group(items) }.value
+        guard gen == generation else { return }
+
+        // Titoli diversi da cercare (le serie una volta sola, i film doppi una volta sola).
+        var queries: [Query] = []
+        var seen = Set<String>()
+        var already = 0
+        for s in grouped.series {
+            let k = Self.key(series: s)
+            guard seen.insert(k).inserted else { continue }
+            if cache[k] != nil { already += 1 } else { queries.append(Query(key: k, title: s.name, year: s.year, series: true)) }
+        }
+        for m in grouped.movies {
+            let k = Self.key(movie: m.parsed)
+            guard seen.insert(k).inserted else { continue }
+            if cache[k] != nil { already += 1 } else { queries.append(Query(key: k, title: m.parsed.title, year: m.parsed.year, series: false)) }
+        }
+        total = seen.count
+        done = already
+
+        guard let tmdb, !queries.isEmpty else { apply(grouped); onProgress?(); return }
         isMapping = true
-        defer { if gen == generation { isMapping = false; onProgress?() } }
-        total = movies.count + series.count
-        done = 0
+        onProgress?()
 
-        // Serie: una ricerca per serie
-        for i in series.indices {
-            if cancelled || gen != generation { return }
-            let k = Self.key(series: series[i])
-            if let hit = cache[k] {
-                series[i].match = hit.item
-            } else {
-                do {
-                    let found = try await tmdb.match(title: series[i].name, year: series[i].year, series: true)
-                    guard gen == generation else { return }
-                    cache[k] = CachedMatch(item: found)
-                    series[i].match = found
-                } catch {
-                    if gen != generation { return }
-                    // rete assente o app sospesa: il titolo verrà ricercato alla ripresa
-                }
+        await withTaskGroup(of: (String, Lookup).self) { group in
+            var next = queries.makeIterator()
+            for _ in 0..<Self.parallelism {
+                guard let q = next.next() else { break }
+                group.addTask { await Self.lookup(q, tmdb) }
             }
-            done += 1
-            if done % 20 == 0 { onProgress?() }
-        }
-        // Film: una ricerca per titolo (con cache per i doppioni)
-        for i in movies.indices {
-            if cancelled || gen != generation { return }
-            let k = Self.key(movie: movies[i].parsed)
-            if let hit = cache[k] {
-                movies[i].match = hit.item
-            } else {
-                do {
-                    let found = try await tmdb.match(title: movies[i].parsed.title, year: movies[i].parsed.year, series: false)
-                    guard gen == generation else { return }
-                    cache[k] = CachedMatch(item: found)
-                    movies[i].match = found
-                } catch {
-                    if gen != generation { return }
-                    // rete assente o app sospesa: il titolo verrà ricercato alla ripresa
-                }
+            while let result = await group.next() {
+                if cancelled || gen != generation { group.cancelAll(); return }
+                if case .found(let item) = result.1 { cache[result.0] = CachedMatch(item: item) }
+                // .failed (rete o limite di richieste): non memorizzato, verrà ricercato
+                done += 1
+                if done % 25 == 0 { onProgress?() }
+                if let q = next.next() { group.addTask { await Self.lookup(q, tmdb) } }
             }
-            done += 1
-            if done % 20 == 0 { onProgress?() }
         }
+        guard gen == generation else { return }
+        apply(grouped)
+        isMapping = false
+        onProgress?()
     }
 }
 
 extension LinkLibrary {
-    /// Importa le proposte già abbinate (senza nuove ricerche).
+    /// Importa le proposte già abbinate (senza nuove ricerche), salvando una sola volta.
     func applyMapping(movies: [MovieProposal], series: [SeriesProposal], lives: [LinkMedia]) {
         var unmatched: [LinkMedia] = lives
+        var movieLinks: [(LinkMedia, MediaItem)] = []
+        var seriesLinks: [([String: LinkMedia], MediaItem)] = []
         for m in movies {
-            if let item = m.match { setMovieLink(m.media, for: item) } else { unmatched.append(m.media) }
+            if let item = m.match { movieLinks.append((m.media, item)) } else { unmatched.append(m.media) }
         }
         for s in series {
-            if let item = s.match { setEpisodeLinks(s.episodes, for: item) } else { unmatched.append(contentsOf: s.episodes.values) }
+            if let item = s.match { seriesLinks.append((s.episodes, item)) } else { unmatched.append(contentsOf: s.episodes.values) }
         }
-        add(unmatched)
+        applyBatch(movies: movieLinks, series: seriesLinks, unmatched: unmatched)
     }
 }
