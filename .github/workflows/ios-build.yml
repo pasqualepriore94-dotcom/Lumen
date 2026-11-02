@@ -33,7 +33,8 @@ jobs:
       - name: Compila (senza firma)
         working-directory: ios
         env:
-          CONFIG_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/config/app-config.json
+          CONFIG_URL: ${{ secrets.SUPABASE_PROJECT_REF && format('https://{0}.supabase.co/storage/v1/object/public/lumen/app-config.json', secrets.SUPABASE_PROJECT_REF) || '' }}
+          FEED_URL: ${{ secrets.SUPABASE_PROJECT_REF && format('https://{0}.supabase.co/storage/v1/object/public/lumen/lumen-source.json', secrets.SUPABASE_PROJECT_REF) || '' }}
           AUTH_URL: ${{ vars.AUTH_SERVER_URL || (secrets.SUPABASE_PROJECT_REF && format('https://{0}.supabase.co/functions/v1/lumen-auth', secrets.SUPABASE_PROJECT_REF)) || '' }}
         run: |
           set -o pipefail
@@ -47,6 +48,7 @@ jobs:
             REMOTE_CONFIG_URL="$CONFIG_URL" \
             AUTH_SERVER_URL="$AUTH_URL" \
             UPDATE_REPO="${{ github.repository }}" \
+            UPDATE_FEED_URL="$FEED_URL" \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             build > build.log 2>&1 || STATUS=$?
@@ -77,6 +79,8 @@ jobs:
         working-directory: ios
         env:
           GH_TOKEN: ${{ github.token }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           cp Lumen-unsigned.ipa Lumen.ipa
           VERSION=$(grep -m1 'MARKETING_VERSION' project.yml | sed 's/.*"\(.*\)".*/\1/')
@@ -84,26 +88,27 @@ jobs:
           # Sorgente per SideStore/AltStore: mostra "Aggiorna" quando esce una nuova build
           SIZE=$(stat -f%z Lumen.ipa)
           REPO="${{ github.repository }}"
+          PUBLIC="https://$PROJECT_REF.supabase.co/storage/v1/object/public/lumen"
           cat > lumen-source.json <<JSON
           {
             "name": "Lumen",
             "identifier": "app.lumen.source",
             "subtitle": "Aggiornamenti di Lumen",
-            "iconURL": "https://raw.githubusercontent.com/$REPO/main/ios/Lumen/Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png",
+            "iconURL": "$PUBLIC/icon.png",
             "apps": [{
               "name": "Lumen",
               "bundleIdentifier": "app.lumen.beta",
               "developerName": "Pasquale Priore",
               "subtitle": "Film e serie TV",
               "localizedDescription": "Catalogo di film e serie in stile Liquid Glass.",
-              "iconURL": "https://raw.githubusercontent.com/$REPO/main/ios/Lumen/Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png",
+              "iconURL": "$PUBLIC/icon.png",
               "tintColor": "7C5CFF",
               "versions": [{
                 "version": "$VERSION",
                 "buildVersion": "${{ github.run_number }}",
                 "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
                 "localizedDescription": "Build ${{ github.run_number }}",
-                "downloadURL": "https://github.com/$REPO/releases/download/$TAG/Lumen.ipa",
+                "downloadURL": "$PUBLIC/releases/$TAG/Lumen.ipa",
                 "size": $SIZE,
                 "minOSVersion": "17.0"
               }],
@@ -118,19 +123,16 @@ jobs:
             --title "Lumen ${VERSION} (build ${{ github.run_number }})" \
             --notes "IPA non firmata da installare con SideStore/AltStore. Link sempre aggiornato: https://github.com/${{ github.repository }}/releases/latest/download/Lumen.ipa" \
             --latest
-          # Copia la sorgente nel repository: SideStore la legge da raw.githubusercontent.com (JSON diretto, senza redirect)
-          cd "$GITHUB_WORKSPACE"
-          mkdir -p sidestore
-          cp ios/lumen-source.json sidestore/lumen-source.json
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add sidestore/lumen-source.json
-          git commit -m "Sorgente SideStore: $TAG [skip ci]" || true
-          git pull --rebase origin "${{ github.ref_name }}" || true
-          git push origin HEAD:"${{ github.ref_name }}" || echo "::warning::Impossibile aggiornare sidestore/lumen-source.json"
-          cd ios
+          # File pubblici su Supabase Storage (il repository è privato)
+          cp Lumen/Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png icon.png
+          ../tools/publish_supabase.sh \
+            "releases/$TAG/Lumen.ipa" Lumen.ipa application/octet-stream \
+            "Lumen.ipa" Lumen.ipa application/octet-stream \
+            "icon.png" icon.png image/png \
+            "lumen-source.json" lumen-source.json application/json \
+            "app-config.json" ../config/app-config.json application/json
           echo "### IPA pronta" >> "$GITHUB_STEP_SUMMARY"
-          echo "https://github.com/${{ github.repository }}/releases/latest/download/Lumen.ipa" >> "$GITHUB_STEP_SUMMARY"
+          echo "$PUBLIC/Lumen.ipa" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:

@@ -1,0 +1,22 @@
+name: Pubblica configurazione app
+
+# Quando il pannello web salva config/app-config.json, lo copia su Supabase Storage (pubblico),
+# da dove l'app lo scarica all'avvio: il repository è privato.
+on:
+  push:
+    branches: [main]
+    paths: ["config/**", ".github/workflows/publish-config.yml"]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Carica app-config.json
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          python3 -c "import json;json.load(open('config/app-config.json'))"
+          tools/publish_supabase.sh "app-config.json" config/app-config.json application/json

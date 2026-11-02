@@ -29,27 +29,30 @@ final class UpdateChecker {
         return available.build != dismissedBuild
     }
 
+    private var feedURL: URL? {
+        let s = ((Bundle.main.object(forInfoDictionaryKey: "UpdateFeedURL") as? String) ?? "")
+            .trimmingCharacters(in: .whitespaces)
+        return s.hasPrefix("http") ? URL(string: s) : nil
+    }
+
+    /// Legge la sorgente SideStore pubblicata a ogni build (versione, numero di build, link all'IPA).
     func check() async {
-        guard let url = URL(string: "https://api.github.com/repos/\(repo)/releases/latest") else { return }
+        guard let url = feedURL else { return }
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
         guard let (data, response) = try? await URLSession.shared.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let tag = json["tag_name"] as? String else { return }
-
-        // Formato tag: v0.3.1-build11
-        let parts = tag.components(separatedBy: "-build")
-        guard parts.count == 2, let build = Int(parts[1]), build > currentBuild else {
+              let app = (json["apps"] as? [[String: Any]])?.first,
+              let latest = (app["versions"] as? [[String: Any]])?.first,
+              let build = Int("\(latest["buildVersion"] ?? "")"),
+              let ipa = latest["downloadURL"] as? String, let ipaURL = URL(string: ipa) else { return }
+        guard build > currentBuild else {
             available = nil
             return
         }
-        let assets = json["assets"] as? [[String: Any]] ?? []
-        let ipa = assets.first { ($0["name"] as? String)?.hasSuffix(".ipa") == true }?["browser_download_url"] as? String
-        guard let ipa, let ipaURL = URL(string: ipa) else { return }
-        let version = parts[0].hasPrefix("v") ? String(parts[0].dropFirst()) : parts[0]
-        available = Update(version: version, build: build, ipaURL: ipaURL,
-                           notes: (json["name"] as? String) ?? "")
+        available = Update(version: (latest["version"] as? String) ?? "", build: build, ipaURL: ipaURL,
+                           notes: (latest["localizedDescription"] as? String) ?? "")
     }
 
     func dismiss() {

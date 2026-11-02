@@ -82,7 +82,13 @@ final class AppState {
         }
         let bundled = (Bundle.main.object(forInfoDictionaryKey: "RemoteConfigURL") as? String)?
             .trimmingCharacters(in: .whitespaces) ?? ""
-        remoteConfigURL = defaults.string(forKey: Keys.remoteURL) ?? (bundled.hasPrefix("http") ? bundled : "")
+        let savedURL = defaults.string(forKey: Keys.remoteURL)
+        // Le installazioni precedenti puntavano a GitHub (ora privato): passa all'indirizzo pubblico della build.
+        if let savedURL, !(savedURL.contains("raw.githubusercontent.com") && bundled.hasPrefix("http")) {
+            remoteConfigURL = savedURL
+        } else {
+            remoteConfigURL = bundled.hasPrefix("http") ? bundled : ""
+        }
         autoSync = defaults.object(forKey: Keys.autoSync) as? Bool ?? true
         lastSync = defaults.object(forKey: Keys.lastSync) as? Date
     }
