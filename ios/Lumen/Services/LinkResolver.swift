@@ -237,7 +237,7 @@ enum LinkResolver {
 }
 
 /// Titolo e numerazione ricavati dal nome di un contenuto della playlist.
-struct ParsedTitle: Equatable {
+struct ParsedTitle: Hashable {
     var title: String
     var year: Int?
     var season: Int?
@@ -360,6 +360,18 @@ final class LinkLibrary {
     func hasLinks(seriesId: String) -> Bool { !(episodeLinks[seriesId]?.isEmpty ?? true) }
 
     func stopMatching() { cancelMatching = true }
+
+    func setMovieLink(_ media: LinkMedia, for item: MediaItem) {
+        movieLinks[item.id] = media
+        matchedItems[item.id] = item
+        saveMatches()
+    }
+
+    func setEpisodeLinks(_ episodes: [String: LinkMedia], for item: MediaItem) {
+        episodeLinks[item.id, default: [:]].merge(episodes) { _, new in new }
+        matchedItems[item.id] = item
+        saveMatches()
+    }
 
     /// Aggiunge i contenuti e abbina quelli on demand al catalogo TMDB cercando per titolo (e anno).
     func importAndMatch(_ list: [LinkMedia], tmdb: TMDBProvider?) async {
