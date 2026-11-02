@@ -48,6 +48,11 @@ enum Playback {
         }
     }
 
+    /// Riproduce direttamente un video trovato da un link (pannello amministratore, "I miei link").
+    static func playLink(_ media: LinkMedia, app: AppState, library: Library) {
+        present(url: media.url, headers: nil, item: media.asItem, episodeId: nil, episodeLabel: nil, library: library)
+    }
+
     private static func present(url: URL, headers: [String: String]?, item: MediaItem, episodeId: String?,
                                 episodeLabel: String?, library: Library) {
         var options: [String: Any] = [:]

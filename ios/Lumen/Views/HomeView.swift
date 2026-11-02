@@ -28,6 +28,9 @@ struct HomeView: View {
                         if activeFilter == nil && !library.continueWatching.isEmpty {
                             ContinueWatchingRow(entries: library.continueWatching)
                         }
+                        if activeFilter == nil {
+                            MyLinksRow()
+                        }
                         if activeFilter == nil && !library.myList.isEmpty {
                             VStack(alignment: .leading, spacing: 10) {
                                 SectionHeader(title: "La mia lista", actionTitle: "Vedi tutto") {

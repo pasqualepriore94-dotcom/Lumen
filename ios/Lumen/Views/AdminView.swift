@@ -30,6 +30,18 @@ struct AdminView: View {
                 }
 
                 Section {
+                    NavigationLink {
+                        LinkImportView()
+                    } label: {
+                        Label("Aggiungi contenuto da link", systemImage: "link.badge.plus")
+                    }
+                } header: {
+                    Text("Da link")
+                } footer: {
+                    Text("Incolla un link: l'app trova i video presenti e ti propone il play.")
+                }
+
+                Section {
                     Picker("Sorgente attiva", selection: Binding(
                         get: { app.activeProviderConfig?.id ?? "" },
                         set: { app.setActiveProvider($0) })) {
