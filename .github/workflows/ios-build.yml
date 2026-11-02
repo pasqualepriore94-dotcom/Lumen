@@ -6,6 +6,9 @@ on:
     paths: ["ios/**", ".github/workflows/ios-build.yml"]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-26
@@ -68,6 +71,22 @@ jobs:
           cp -R build/Build/Products/Release-iphoneos/Lumen.app Payload/
           zip -qry Lumen-unsigned.ipa Payload
           ls -lh Lumen-unsigned.ipa
+
+      - name: Pubblica l'IPA come release (link diretto per SideStore)
+        working-directory: ios
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp Lumen-unsigned.ipa Lumen.ipa
+          VERSION=$(grep -m1 'MARKETING_VERSION' project.yml | sed 's/.*"\(.*\)".*/\1/')
+          TAG="v${VERSION}-build${{ github.run_number }}"
+          gh release create "$TAG" Lumen.ipa \
+            --repo "${{ github.repository }}" \
+            --title "Lumen ${VERSION} (build ${{ github.run_number }})" \
+            --notes "IPA non firmata da installare con SideStore/AltStore. Link sempre aggiornato: https://github.com/${{ github.repository }}/releases/latest/download/Lumen.ipa" \
+            --latest
+          echo "### IPA pronta" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://github.com/${{ github.repository }}/releases/latest/download/Lumen.ipa" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
