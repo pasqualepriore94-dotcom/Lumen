@@ -15,3 +15,4 @@ post_install do |installer|
     end
   end
 end
+# rebuild 2026-11-02T17:33:13
