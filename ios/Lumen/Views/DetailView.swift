@@ -239,10 +239,7 @@ struct DetailView: View {
                 }
                 watchedButton
                 downloadButton
-                ShareLink(item: current.title, message: Text(current.overview ?? "")) {
-                    actionLabel("square.and.arrow.up", "Condividi")
-                }
-                .buttonStyle(GlassButtonStyle(shape: AnyShape(RoundedRectangle(cornerRadius: 18, style: .continuous))))
+                shareButton
                 if let link = detail?.watchLink {
                     actionButton("tv", "Dove vederlo") { openURL(link) }
                 }
@@ -251,6 +248,26 @@ struct DetailView: View {
     }
 
     @ViewBuilder
+    /// Condivide il link del trailer (WhatsApp, Messaggi, Instagram, ecc.); se non c'è il trailer, il titolo.
+    @ViewBuilder
+    private var shareButton: some View {
+        let style = GlassButtonStyle(shape: AnyShape(RoundedRectangle(cornerRadius: 18, style: .continuous)))
+        if let trailer = detail?.trailer {
+            ShareLink(item: trailer,
+                      subject: Text("Trailer di \(current.title)"),
+                      message: Text("Guarda il trailer di \(current.title)\(current.year.map { " (\($0))" } ?? "") 🎬")) {
+                actionLabel("square.and.arrow.up", "Condividi")
+            }
+            .buttonStyle(style)
+        } else {
+            ShareLink(item: current.title, message: Text("Trailer non disponibile per \(current.title)")) {
+                actionLabel("square.and.arrow.up", "Condividi")
+            }
+            .buttonStyle(style)
+            .disabled(detail == nil)
+        }
+    }
+
     private var watchedButton: some View {
         if current.isSeries {
             seriesWatchedButton
