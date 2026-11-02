@@ -237,7 +237,7 @@ enum LinkResolver {
 }
 
 /// Titolo e numerazione ricavati dal nome di un contenuto della playlist.
-struct ParsedTitle: Hashable {
+struct ParsedTitle: Hashable, Codable {
     var title: String
     var year: Int?
     var season: Int?

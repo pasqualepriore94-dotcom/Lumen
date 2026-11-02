@@ -8,23 +8,16 @@ struct LinkImportView: View {
     @Environment(AppState.self) private var app
     @Environment(Library.self) private var library
     @State private var links = LinkLibrary.shared
-    @State private var mapper = LinkMapper()
+    @State private var job = ImportJob.shared
+    private var mapper: LinkMapper { job.mapper }
 
     @State private var input = ""
-    @State private var analyzing = false
-    @State private var providerBase: String?
-    @State private var providerTitles = 0
-    @State private var message: String?
     @State private var tab = 0
     @State private var filterText = ""
-    @State private var selMovies = Set<String>()
-    @State private var selSeries = Set<String>()
-    @State private var selLives = Set<String>()
     @State private var onlyMatched = false
     @State private var playlists = PlaylistStore.shared
     @State private var pickingFile = false
     @State private var showPlaylists = false
-    @State private var currentPlaylist: String?
 
     private static let playlistTypes: [UTType] = {
         var t: [UTType] = [.m3uPlaylist, .plainText, .text, .data]
@@ -32,19 +25,17 @@ struct LinkImportView: View {
         return t
     }()
 
-    private var tmdb: TMDBProvider? {
-        app.config.providers.first { $0.type == .tmdb && $0.isUsable }.map { TMDBProvider(config: $0) }
-    }
-
     var body: some View {
         List {
             inputSection
 
-            if let message {
+            if let job.message = job.message {
                 Section { Text(message).font(.footnote).foregroundStyle(.secondary) }
             }
 
-            if let base = providerBase { providerSection(base) }
+            if let base = job.providerBase { providerSection(base) }
+
+            if job.isRunning { runningSection }
 
             if hasResults {
                 summarySection
@@ -83,21 +74,48 @@ struct LinkImportView: View {
         .onAppear {
             if input.isEmpty, let s = UIPasteboard.general.string, s.lowercased().hasPrefix("http") { input = s }
         }
-        .onDisappear { if !showPlaylists { mapper.cancel() } }
+        .onAppear { if job.phase == .ready { job.unseen = false } }
+        .onChange(of: job.phase) { if job.phase == .ready { job.unseen = false; tab = 0 } }
         .fileImporter(isPresented: $pickingFile, allowedContentTypes: Self.playlistTypes, allowsMultipleSelection: false) { result in
             loadFile(result)
         }
         .navigationDestination(isPresented: $showPlaylists) {
             PlaylistsView { p, list in
                 showPlaylists = false
-                currentPlaylist = p.name
-                message = "Playlist \"\(p.name)\": \(list.count) voci."
-                analyzeMedia(list)
+                job.startMedia(list, name: p.name, app: app)
             }
         }
     }
 
-    private var hasResults: Bool { !mapper.movies.isEmpty || !mapper.series.isEmpty || !mapper.lives.isEmpty }
+    private var hasResults: Bool {
+        job.phase == .ready && (!mapper.movies.isEmpty || !mapper.series.isEmpty || !mapper.lives.isEmpty)
+    }
+
+    private var runningSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: "gearshape.2.fill").foregroundStyle(app.accent)
+                    Text(job.sourceName).font(.subheadline.weight(.semibold)).lineLimit(1)
+                    Spacer()
+                    Text("\(Int(job.progress * 100))%").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                }
+                if job.phase == .downloading {
+                    ProgressView().tint(app.accent)
+                } else {
+                    ProgressView(value: job.progress).tint(app.accent)
+                }
+                Text(job.statusText).font(.caption).foregroundStyle(.secondary)
+                Button("Interrompi analisi", role: .destructive) { job.cancel() }
+                    .font(.caption.bold()).buttonStyle(.borderless)
+            }
+            .padding(.vertical, 4)
+        } header: {
+            Text("Analisi in corso")
+        } footer: {
+            Text("Lavora in background: puoi chiudere il pannello o passare a un'altra app. Quando ha finito ti avviso e qui compaiono film, serie e dirette da scegliere.")
+        }
+    }
 
     // MARK: Link
 
@@ -119,14 +137,14 @@ struct LinkImportView: View {
                 HStack {
                     Label("Analizza link", systemImage: "wand.and.stars")
                     Spacer()
-                    if analyzing { ProgressView() }
+                    if job.phase == .downloading { ProgressView() }
                 }
             }
-            .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty || analyzing || mapper.isMapping)
+            .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty || job.isRunning)
             Button { pickingFile = true } label: {
                 Label("Carica file .m3u dal telefono", systemImage: "doc.badge.plus")
             }
-            .disabled(analyzing || mapper.isMapping)
+            .disabled(job.isRunning)
         } header: {
             Text("Link o file")
         } footer: {
@@ -137,15 +155,15 @@ struct LinkImportView: View {
     private func providerSection(_ base: String) -> some View {
         Section("API trovata") {
             LabeledContent("Indirizzo", value: base).font(.footnote)
-            LabeledContent("Titoli nella home", value: "\(providerTitles)").font(.footnote)
+            LabeledContent("Titoli nella home", value: "\(job.providerTitles)").font(.footnote)
             Button {
                 var p = ProviderConfig.newCustom()
                 p.name = URL(string: base)?.host ?? "Nuova API"
                 p.baseURL = base
                 app.upsert(p)
                 app.setActiveProvider(p.id)
-                message = "Sorgente aggiunta e impostata come attiva."
-                providerBase = nil
+                job.message = "Sorgente aggiunta e impostata come attiva."
+                job.providerBase = nil
             } label: {
                 Label("Aggiungi come sorgente e usala", systemImage: "plus.circle.fill")
             }
@@ -163,15 +181,10 @@ struct LinkImportView: View {
             }
             .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
 
-            if mapper.isMapping {
-                VStack(alignment: .leading, spacing: 6) {
-                    ProgressView(value: Double(mapper.done), total: Double(max(1, mapper.total))).tint(app.accent)
-                    HStack {
-                        Text("Abbinamento al catalogo: \(mapper.done)/\(mapper.total)").font(.caption)
-                        Spacer()
-                        Button("Interrompi") { mapper.cancel() }.font(.caption.bold()).buttonStyle(.borderless)
-                    }
-                }
+            HStack {
+                Label(job.sourceName, systemImage: "checkmark.seal.fill").font(.caption.bold()).foregroundStyle(app.accent)
+                Spacer()
+                Button("Chiudi risultati") { job.clear() }.font(.caption.bold()).buttonStyle(.borderless)
             }
 
             Picker("Mostra", selection: $tab) {
@@ -189,11 +202,11 @@ struct LinkImportView: View {
             Button {
                 importAll()
             } label: {
-                Label("Importa film e serie selezionati (\(selMovies.count + selSeries.count))",
+                Label("Importa film e serie selezionati (\(job.selMovies.count + job.selSeries.count))",
                       systemImage: "tray.and.arrow.down.fill")
                     .font(.body.weight(.semibold))
             }
-            .disabled(selMovies.isEmpty && selSeries.isEmpty || mapper.isMapping)
+            .disabled(job.selMovies.isEmpty && job.selSeries.isEmpty)
         } header: {
             Text("Contenuti trovati")
         } footer: {
@@ -224,16 +237,16 @@ struct LinkImportView: View {
     private var moviesSection: some View {
         Section {
             ForEach(visibleMovies.prefix(400)) { p in
-                proposalRow(selected: selMovies.contains(p.id),
-                            toggle: { toggle(&selMovies, p.id) },
+                proposalRow(selected: job.selMovies.contains(p.id),
+                            toggle: { toggle(&job.selMovies, p.id) },
                             sourceTitle: p.media.title,
                             sourceDetail: p.media.group,
                             match: p.match,
-                            pending: mapper.isMapping && p.match == nil,
+                            pending: false,
                             preview: { Playback.playLink(p.media, app: app, library: library) })
             }
         } header: {
-            selectionHeader("Film", ids: Set(visibleMovies.map(\.id)), selection: $selMovies)
+            selectionHeader("Film", ids: Set(visibleMovies.map(\.id)), selection: $job.selMovies)
         }
     }
 
@@ -246,19 +259,19 @@ struct LinkImportView: View {
     private var seriesSection: some View {
         Section {
             ForEach(visibleSeries.prefix(400)) { s in
-                proposalRow(selected: selSeries.contains(s.id),
-                            toggle: { toggle(&selSeries, s.id) },
+                proposalRow(selected: job.selSeries.contains(s.id),
+                            toggle: { toggle(&job.selSeries, s.id) },
                             sourceTitle: s.name,
                             sourceDetail: "\(s.episodes.count) episodi · stagioni \(s.seasons.map(String.init).joined(separator: ", "))",
                             match: s.match,
-                            pending: mapper.isMapping && s.match == nil,
+                            pending: false,
                             preview: nil)
             }
             if mapper.series.isEmpty {
                 Text("Nessun episodio riconosciuto (nomi tipo \"Serie S01E02\").").foregroundStyle(.secondary)
             }
         } header: {
-            selectionHeader("Serie", ids: Set(visibleSeries.map(\.id)), selection: $selSeries)
+            selectionHeader("Serie", ids: Set(visibleSeries.map(\.id)), selection: $job.selSeries)
         }
     }
 
@@ -270,26 +283,26 @@ struct LinkImportView: View {
         Group {
             Section {
                 Button {
-                    let chosen = mapper.lives.filter { selLives.contains($0.id) }
+                    let chosen = mapper.lives.filter { job.selLives.contains($0.id) }
                     links.add(chosen)
-                    message = "\(chosen.count) dirette salvate nel pannello."
-                    selLives = []
+                    job.message = "\(chosen.count) dirette salvate nel pannello."
+                    job.selLives = []
                 } label: {
-                    Label("Importa solo le live selezionate (\(selLives.count))", systemImage: "dot.radiowaves.left.and.right")
+                    Label("Importa solo le live selezionate (\(job.selLives.count))", systemImage: "dot.radiowaves.left.and.right")
                 }
-                .disabled(selLives.isEmpty)
+                .disabled(job.selLives.isEmpty)
             } footer: {
                 Text("Le dirette non hanno una scheda nel catalogo: restano nell'elenco del pannello, da cui le avvii.")
             }
             Section {
                 ForEach(visibleLives.prefix(400)) { m in
                     HStack(spacing: 10) {
-                        checkButton(selLives.contains(m.id)) { toggle(&selLives, m.id) }
+                        checkButton(job.selLives.contains(m.id)) { toggle(&job.selLives, m.id) }
                         savedRow(m)
                     }
                 }
             } header: {
-                selectionHeader("Dirette", ids: Set(visibleLives.map(\.id)), selection: $selLives)
+                selectionHeader("Dirette", ids: Set(visibleLives.map(\.id)), selection: $job.selLives)
             }
         }
     }
@@ -379,84 +392,43 @@ struct LinkImportView: View {
     // MARK: Azioni
 
     private func importAll() {
-        let movies = mapper.movies.filter { selMovies.contains($0.id) }
-        let series = mapper.series.filter { selSeries.contains($0.id) }
+        let movies = mapper.movies.filter { job.selMovies.contains($0.id) }
+        let series = mapper.series.filter { job.selSeries.contains($0.id) }
         links.applyMapping(movies: movies, series: series, lives: [])
         let mFound = movies.filter { $0.match != nil }.count
         let sFound = series.filter { $0.match != nil }.count
         let eps = series.filter { $0.match != nil }.reduce(0) { $0 + $1.episodes.count }
-        message = "Importati \(mFound) film e \(sFound) serie (\(eps) episodi) nel catalogo. "
+        job.message = "Importati \(mFound) film e \(sFound) serie (\(eps) episodi) nel catalogo. "
             + "I non trovati (\(movies.count - mFound + series.count - sFound)) sono nell'elenco del pannello."
-        selMovies.subtract(movies.map(\.id))
-        selSeries.subtract(series.map(\.id))
+        job.selMovies.subtract(movies.map(\.id))
+        job.selSeries.subtract(series.map(\.id))
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 
     private func analyze() {
         let text = input
         guard !text.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-        analyzing = true
-        message = nil
-        providerBase = nil
-        mapper.reset()
-        selMovies = []; selSeries = []; selLives = []
-        Task {
-            let result = await LinkResolver.resolve(text)
-            analyzing = false
-            switch result {
-            case .media(let list):
-                // Le playlist prese da link vengono salvate, così si possono aggiornare o eliminare.
-                if list.count > 1, list.allSatisfy({ $0.source == "Playlist" }),
-                   let url = LinkResolver.normalize(text) {
-                    var request = URLRequest(url: url, timeoutInterval: 30)
-                    request.setValue("Lumen", forHTTPHeaderField: "User-Agent")
-                    if let pair = try? await URLSession.shared.data(for: request), let body = PlaylistStore.decode(pair.0) {
-                        playlists.save(name: url.host ?? "Playlist", origin: url.absoluteString, text: body)
-                    }
-                }
-                analyzeMedia(list)
-            case .provider(let base, let titles):
-                providerBase = base
-                providerTitles = titles
-            case .nothing(let why):
-                message = why
-            }
-        }
-    }
-
-    private func analyzeMedia(_ list: [LinkMedia]) {
-        mapper.reset()
-        selMovies = []; selSeries = []; selLives = []
-        providerBase = nil
-        tab = 0
-        guard !list.isEmpty else { message = "La playlist non contiene voci riproducibili."; return }
-        Task {
-            await mapper.prepare(list, tmdb: tmdb)
-            // Pre-selezione: film e serie trovati nel catalogo.
-            selMovies = Set(mapper.movies.filter { $0.match != nil }.map(\.id))
-            selSeries = Set(mapper.series.filter { $0.match != nil }.map(\.id))
-        }
+        job.startLink(text, app: app)
     }
 
     private func loadFile(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result, let url = urls.first else {
-            if case .failure(let e) = result { message = "Impossibile aprire il file: \(e.localizedDescription)" }
+            if case .failure(let e) = result { job.message = "Impossibile aprire il file: \(e.localizedDescription)" }
             return
         }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         guard let data = try? Data(contentsOf: url), let text = PlaylistStore.decode(data) else {
-            message = "Impossibile leggere il file."
+            job.message = "Impossibile leggere il file."
             return
         }
         guard text.contains("#EXTINF") || text.hasPrefix("#EXTM3U") || text.contains("://") else {
-            message = "Il file non sembra una playlist M3U."
+            job.message = "Il file non sembra una playlist M3U."
             return
         }
         let name = url.deletingPathExtension().lastPathComponent
         let (saved, list) = playlists.save(name: name, origin: "File: " + url.lastPathComponent, text: text)
-        currentPlaylist = saved.name
-        message = "File \"\(url.lastPathComponent)\": \(saved.entries) voci (\(saved.vods) on demand, \(saved.lives) dirette). Salvato in Playlist M3U."
-        analyzeMedia(list)
+        job.startMedia(list, name: saved.name, app: app)
+        job.message = "File \"\(url.lastPathComponent)\": \(saved.entries) voci (\(saved.vods) on demand, \(saved.lives) dirette). Salvato in Playlist M3U."
     }
 }

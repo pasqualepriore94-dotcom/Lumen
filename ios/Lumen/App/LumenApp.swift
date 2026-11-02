@@ -44,7 +44,10 @@ struct LumenApp: App {
             .environment(auth)
             .environment(updates)
             .onChange(of: scenePhase) {
-                if scenePhase == .active { Task { await updates.check() } }
+                if scenePhase == .active {
+                    Task { await updates.check() }
+                    ImportJob.shared.resumeIfNeeded(app: app)
+                }
             }
             .preferredColorScheme(.dark)
             .tint(app.accent)
@@ -107,6 +110,11 @@ struct RootView: View {
         }
         .sheet(isPresented: $app.showCatalog) {
             CatalogBrowserView()
+        }
+        .overlay(alignment: .top) {
+            ImportJobBanner()
+                .padding(.top, updates.showBanner ? 84 : 4)
+                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: ImportJob.shared.unseen)
         }
         .overlay(alignment: .top) {
             UpdateBanner()

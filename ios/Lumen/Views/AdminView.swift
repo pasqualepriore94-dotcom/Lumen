@@ -11,6 +11,8 @@ struct AdminView: View {
     @State private var showImport = false
     @State private var importError: String?
 
+    @State private var job = ImportJob.shared
+
     var body: some View {
         @Bindable var app = app
         NavigationStack {
@@ -33,7 +35,15 @@ struct AdminView: View {
                     NavigationLink {
                         LinkImportView()
                     } label: {
-                        Label("Aggiungi contenuto da link", systemImage: "link.badge.plus")
+                        HStack {
+                            Label("Aggiungi contenuto da link o file", systemImage: "link.badge.plus")
+                            Spacer()
+                            if job.isRunning {
+                                Text("\(Int(job.progress * 100))%").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            } else if job.phase == .ready {
+                                Text("Pronti").font(.caption.bold()).foregroundStyle(app.accent)
+                            }
+                        }
                     }
                     NavigationLink {
                         LinkedContentView()
@@ -168,6 +178,7 @@ struct AdminView: View {
                 Text("Le API aggiunte su questo dispositivo verranno rimosse.")
             }
             .sheet(isPresented: $showImport) { importSheet }
+            .navigationDestination(isPresented: $job.openRequested) { LinkImportView() }
         }
         .preferredColorScheme(.dark)
     }
