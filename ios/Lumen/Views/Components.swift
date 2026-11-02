@@ -37,6 +37,9 @@ struct RemoteImage: View {
     var body: some View {
         if let url, url.scheme == "bundle", let image = UIImage(named: url.host ?? url.lastPathComponent) {
             Image(uiImage: image).resizable().scaledToFill()
+        } else if let url, let offline = ImageStore.cachedImage(for: url) {
+            // Immagine salvata per l'uso offline
+            Image(uiImage: offline).resizable().scaledToFill()
         } else if let url {
             AsyncImage(url: url, transaction: Transaction(animation: .easeOut(duration: 0.25))) { phase in
                 switch phase {
@@ -132,17 +135,7 @@ struct TabHeader: View {
 }
 
 struct DownloadsPlaceholder: View {
-    var body: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "arrow.down.circle").font(.system(size: 54)).foregroundStyle(.secondary)
-            Text("Download").font(.title2.bold())
-            Text("I download offline arriveranno in una prossima beta.")
-                .multilineTextAlignment(.center).foregroundStyle(.secondary)
-        }
-        .padding(32)
-        .presentationDetents([.medium])
-        .preferredColorScheme(.dark)
-    }
+    var body: some View { DownloadsView() }
 }
 
 struct NotificationsView: View {

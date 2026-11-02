@@ -17,7 +17,14 @@ enum Playback {
 
             // Serie senza episodio scelto: riprende da dove eri rimasto o parte dal primo.
             if item.isSeries && episode == nil {
-                let detail = try await provider.detail(id: item.id)
+                let detail: MediaDetail
+                if let fetched = try? await provider.detail(id: item.id) {
+                    detail = fetched
+                } else if let saved = DownloadManager.shared.savedDetail(item.id) {
+                    detail = saved
+                } else {
+                    detail = try await provider.detail(id: item.id)
+                }
                 let resume = library.resumeEntry(for: item.id)
                 if let e = detail.episode(id: resume?.episodeId) ?? detail.firstEpisode {
                     episode = e
@@ -25,9 +32,15 @@ enum Playback {
                 }
             }
 
+            // Se il video è stato scaricato si riproduce dal file locale, anche senza connessione.
+            if let local = DownloadManager.shared.localFile(itemId: item.id, episodeId: episode?.id) {
+                present(url: local, headers: nil, item: item, episodeId: episode?.id, episodeLabel: label, library: library)
+                return
+            }
             let sources = try await provider.streams(id: item.id, episodeId: episode?.id)
             guard let source = sources.first else { throw ProviderError.noStreams }
-            present(source: source, item: item, episodeId: episode?.id, episodeLabel: label, library: library)
+            present(url: source.url, headers: source.headers, item: item, episodeId: episode?.id,
+                    episodeLabel: label, library: library)
         } catch is CancellationError {
             return
         } catch {
@@ -35,13 +48,13 @@ enum Playback {
         }
     }
 
-    private static func present(source: StreamSource, item: MediaItem, episodeId: String?,
+    private static func present(url: URL, headers: [String: String]?, item: MediaItem, episodeId: String?,
                                 episodeLabel: String?, library: Library) {
         var options: [String: Any] = [:]
-        if let headers = source.headers, !headers.isEmpty {
+        if let headers, !headers.isEmpty {
             options["AVURLAssetHTTPHeaderFieldsKey"] = headers
         }
-        let asset = AVURLAsset(url: source.url, options: options)
+        let asset = AVURLAsset(url: url, options: options)
         let playerItem = AVPlayerItem(asset: asset)
         playerItem.externalMetadata = metadata(title: episodeLabel ?? item.title, subtitle: episodeLabel == nil ? nil : item.title)
         let player = AVPlayer(playerItem: playerItem)

@@ -120,7 +120,7 @@ struct HomeFeed: Decodable {
     }
 }
 
-struct Episode: Decodable, Identifiable, Hashable {
+struct Episode: Codable, Identifiable, Hashable {
     var id: String
     var number: Int
     var title: String
@@ -150,7 +150,7 @@ struct Episode: Decodable, Identifiable, Hashable {
     }
 }
 
-struct Season: Decodable, Identifiable, Hashable {
+struct Season: Codable, Identifiable, Hashable {
     var id: String
     var number: Int
     var title: String?
@@ -169,7 +169,7 @@ struct Season: Decodable, Identifiable, Hashable {
     var displayTitle: String { title ?? "Stagione \(number)" }
 }
 
-struct CastMember: Decodable, Hashable, Identifiable {
+struct CastMember: Codable, Hashable, Identifiable {
     var id: String { name + (character ?? "") }
     var name: String
     var character: String?
@@ -194,7 +194,7 @@ struct CastMember: Decodable, Hashable, Identifiable {
     }
 }
 
-struct WatchProvider: Decodable, Hashable, Identifiable {
+struct WatchProvider: Codable, Hashable, Identifiable {
     var id: String { name }
     var name: String
     var logo: URL?
@@ -214,7 +214,7 @@ struct WatchProvider: Decodable, Hashable, Identifiable {
 
 /// Dettaglio di un titolo. Accetta sia `{ "item": {...}, "seasons": [...] }`
 /// sia un oggetto "piatto" con i campi del titolo al primo livello.
-struct MediaDetail: Decodable {
+struct MediaDetail: Codable {
     var item: MediaItem
     var seasons: [Season]
     var cast: [CastMember]

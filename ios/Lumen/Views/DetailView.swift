@@ -238,6 +238,7 @@ struct DetailView: View {
                     withAnimation { library.toggle(current) }
                 }
                 watchedButton
+                downloadButton
                 ShareLink(item: current.title, message: Text(current.overview ?? "")) {
                     actionLabel("square.and.arrow.up", "Condividi")
                 }
@@ -418,6 +419,8 @@ struct DetailView: View {
             seasonToggle(seasons[index], detail: detail)
             ForEach(seasons[index].episodes) { episode in
                 EpisodeRow(episode: episode, fallbackImage: current.bestWideImage, playable: canStream,
+                           download: canStream ? downloads.record(itemId: current.id, episodeId: episode.id) : nil,
+                           onDownload: episodeDownloadAction(episode, detail: detail),
                            watched: library.isEpisodeWatched(seriesId: current.id, episodeId: episode.id),
                            toggleWatched: {
                                withAnimation(.snappy) { library.toggleEpisode(episode, item: current, detail: detail) }
@@ -460,10 +463,74 @@ struct DetailView: View {
         do {
             detail = try await app.provider.detail(id: item.id)
             errorMessage = nil
+            // Tiene aggiornata la scheda salvata offline, se c'è.
+            if let detail, DownloadManager.shared.savedDetail(item.id) != nil {
+                await DownloadManager.shared.saveInfo(item: detail.item, detail: detail)
+            }
         } catch is CancellationError {
         } catch {
-            errorMessage = error.localizedDescription
+            if let saved = DownloadManager.shared.savedDetail(item.id) {
+                detail = saved
+                errorMessage = nil
+            } else {
+                errorMessage = error.localizedDescription
+            }
         }
+    }
+
+    // MARK: Download
+
+    private func episodeDownloadAction(_ episode: Episode, detail: MediaDetail) -> (() -> Void)? {
+        guard canStream else { return nil }
+        return {
+            if let r = downloads.record(itemId: current.id, episodeId: episode.id), r.state != .failed {
+                downloads.remove(r.id)
+            } else {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                Task {
+                    await downloads.download(item: current, episode: episode,
+                                             episodeLabel: detail.label(for: episode), detail: detail,
+                                             provider: app.provider)
+                }
+            }
+        }
+    }
+
+    private var downloads: DownloadManager { DownloadManager.shared }
+
+    private var downloadButton: some View {
+        let record = downloads.record(itemId: current.id, episodeId: nil)
+        let icon: String
+        let title: String
+        switch record?.state {
+        case .done?: icon = "checkmark.circle.fill"; title = "Scaricato"
+        case .downloading?: icon = "arrow.down.circle.dotted"; title = "\(Int((record?.progress ?? 0) * 100))%"
+        case .waiting?: icon = "clock"; title = "In attesa"
+        case .saved?: icon = "checkmark.circle.fill"; title = "Salvato"
+        default: icon = "arrow.down.circle"; title = canStream ? "Scarica" : "Salva offline"
+        }
+        return Button {
+            if let record, record.state != .failed {
+                downloads.remove(record.id)
+                return
+            }
+            guard let detail else { return }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            Task {
+                if canStream && !current.isSeries {
+                    await downloads.download(item: current, episode: nil, episodeLabel: nil, detail: detail,
+                                             provider: app.provider)
+                } else {
+                    // Catalogo informativo, o serie (gli episodi si scaricano uno per uno).
+                    await downloads.saveInfo(item: current, detail: detail)
+                }
+            }
+        } label: {
+            actionLabel(icon, title)
+        }
+        .buttonStyle(GlassButtonStyle(tint: record?.state == .done || record?.state == .saved ? app.accent : nil,
+                                      shape: AnyShape(RoundedRectangle(cornerRadius: 18, style: .continuous))))
+        .disabled(detail == nil && record == nil)
     }
 
     private func formatDuration(_ seconds: Int) -> String {
@@ -477,6 +544,8 @@ struct EpisodeRow: View {
     let episode: Episode
     let fallbackImage: URL?
     var playable = true
+    var download: DownloadRecord? = nil
+    var onDownload: (() -> Void)? = nil
     var watched = false
     var toggleWatched: () -> Void = {}
     let play: () -> Void
@@ -504,10 +573,32 @@ struct EpisodeRow: View {
                     }
                     Spacer(minLength: 0)
                 }
-                .padding(.trailing, 42)
+                .padding(.trailing, onDownload == nil ? 42 : 82)
             }
             .buttonStyle(.plain)
             .overlay(alignment: .trailing) {
+                HStack(spacing: 0) {
+                if let onDownload {
+                    Button(action: onDownload) {
+                        ZStack {
+                            if download?.state == .downloading {
+                                Circle().trim(from: 0, to: download?.progress ?? 0)
+                                    .stroke(app.accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                                    .rotationEffect(.degrees(-90))
+                                    .frame(width: 22, height: 22)
+                                Image(systemName: "stop.fill").font(.system(size: 8))
+                            } else {
+                                Image(systemName: download?.state == .done ? "arrow.down.circle.fill" : "arrow.down.circle")
+                                    .font(.system(size: 22))
+                                    .foregroundStyle(download?.state == .done ? app.accent : .white.opacity(0.55))
+                            }
+                        }
+                        .frame(width: 40, height: 44)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Scarica episodio")
+                }
                 Button(action: toggleWatched) {
                     Image(systemName: watched ? "checkmark.circle.fill" : "checkmark.circle")
                         .font(.system(size: 26, weight: .regular))
@@ -518,6 +609,7 @@ struct EpisodeRow: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(watched ? "Episodio visto" : "Segna episodio come visto")
+                }
             }
             if let overview = episode.overview, !overview.isEmpty {
                 Text(overview).font(.caption).foregroundStyle(Theme.secondaryText).lineLimit(3)
