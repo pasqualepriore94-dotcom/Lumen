@@ -46,6 +46,7 @@ jobs:
             -derivedDataPath build \
             REMOTE_CONFIG_URL="$CONFIG_URL" \
             AUTH_SERVER_URL="$AUTH_URL" \
+            UPDATE_REPO="${{ github.repository }}" \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             build > build.log 2>&1 || STATUS=$?
@@ -80,7 +81,39 @@ jobs:
           cp Lumen-unsigned.ipa Lumen.ipa
           VERSION=$(grep -m1 'MARKETING_VERSION' project.yml | sed 's/.*"\(.*\)".*/\1/')
           TAG="v${VERSION}-build${{ github.run_number }}"
-          gh release create "$TAG" Lumen.ipa \
+          # Sorgente per SideStore/AltStore: mostra "Aggiorna" quando esce una nuova build
+          SIZE=$(stat -f%z Lumen.ipa)
+          REPO="${{ github.repository }}"
+          cat > lumen-source.json <<JSON
+          {
+            "name": "Lumen",
+            "identifier": "app.lumen.source",
+            "subtitle": "Aggiornamenti di Lumen",
+            "iconURL": "https://raw.githubusercontent.com/$REPO/main/ios/Lumen/Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png",
+            "apps": [{
+              "name": "Lumen",
+              "bundleIdentifier": "app.lumen.beta",
+              "developerName": "Pasquale Priore",
+              "subtitle": "Film e serie TV",
+              "localizedDescription": "Catalogo di film e serie in stile Liquid Glass.",
+              "iconURL": "https://raw.githubusercontent.com/$REPO/main/ios/Lumen/Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png",
+              "tintColor": "7C5CFF",
+              "versions": [{
+                "version": "$VERSION",
+                "buildVersion": "${{ github.run_number }}",
+                "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+                "localizedDescription": "Build ${{ github.run_number }}",
+                "downloadURL": "https://github.com/$REPO/releases/download/$TAG/Lumen.ipa",
+                "size": $SIZE,
+                "minOSVersion": "17.0"
+              }],
+              "appPermissions": {"entitlements": [], "privacy": {}}
+            }],
+            "news": []
+          }
+          JSON
+          python3 -c "import json;json.load(open('lumen-source.json'))"
+          gh release create "$TAG" Lumen.ipa lumen-source.json \
             --repo "${{ github.repository }}" \
             --title "Lumen ${VERSION} (build ${{ github.run_number }})" \
             --notes "IPA non firmata da installare con SideStore/AltStore. Link sempre aggiornato: https://github.com/${{ github.repository }}/releases/latest/download/Lumen.ipa" \

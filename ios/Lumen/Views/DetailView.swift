@@ -13,6 +13,8 @@ struct DetailView: View {
     @State private var seasonIndex = 0
     @State private var expandedOverview = false
     @State private var watchSummary: WatchedEntry?
+    @State private var trailerURL: URL?
+    @State private var showTrailer = false
 
     private var current: MediaItem { detail?.item ?? item }
     private var canStream: Bool { app.provider.capabilities.streams }
@@ -75,6 +77,9 @@ struct DetailView: View {
         .preferredColorScheme(.dark)
         .playbackHUD()
         .sheet(item: $watchSummary) { WatchTimeView(highlight: $0) }
+        .fullScreenCover(isPresented: $showTrailer) {
+            if let trailerURL { TrailerPlayerView(title: current.title, url: trailerURL) }
+        }
         .task(id: app.contentKey) { await load() }
     }
 
@@ -154,18 +159,23 @@ struct DetailView: View {
         }
         if let trailer = detail?.trailer {
             if canStream {
-                SecondaryButton(title: "Guarda il trailer", icon: "play.rectangle") { openURL(trailer) }
+                SecondaryButton(title: "Guarda il trailer", icon: "play.rectangle") { playTrailer(trailer) }
             } else {
-                PrimaryButton(title: "Guarda il trailer", icon: "play.rectangle.fill") { openURL(trailer) }
+                PrimaryButton(title: "Guarda il trailer", icon: "play.rectangle.fill") { playTrailer(trailer) }
             }
         }
+    }
+
+    private func playTrailer(_ url: URL) {
+        trailerURL = url
+        showTrailer = true
     }
 
     private func primaryAction() {
         if canStream {
             Task { await Playback.play(item: current, app: app, library: library) }
         } else if let trailer = detail?.trailer {
-            openURL(trailer)
+            playTrailer(trailer)
         }
     }
 

@@ -6,6 +6,8 @@ struct LumenApp: App {
     @State private var app = AppState()
     @State private var library = Library()
     @State private var auth = AuthStore()
+    @State private var updates = UpdateChecker()
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         URLCache.shared = URLCache(memoryCapacity: 64 * 1024 * 1024, diskCapacity: 300 * 1024 * 1024)
@@ -32,6 +34,10 @@ struct LumenApp: App {
             .environment(app)
             .environment(library)
             .environment(auth)
+            .environment(updates)
+            .onChange(of: scenePhase) {
+                if scenePhase == .active { Task { await updates.check() } }
+            }
             .preferredColorScheme(.dark)
             .tint(app.accent)
             .onAppear {
@@ -49,6 +55,9 @@ struct LumenApp: App {
                     group.addTask { @MainActor in
                         await auth.restore()
                     }
+                    group.addTask { @MainActor in
+                        await updates.check()
+                    }
                 }
             }
         }
@@ -57,6 +66,7 @@ struct LumenApp: App {
 
 struct RootView: View {
     @Environment(AppState.self) private var app
+    @Environment(UpdateChecker.self) private var updates
 
     var body: some View {
         @Bindable var app = app
@@ -89,6 +99,11 @@ struct RootView: View {
         }
         .sheet(isPresented: $app.showCatalog) {
             CatalogBrowserView()
+        }
+        .overlay(alignment: .top) {
+            UpdateBanner()
+                .padding(.top, 4)
+                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: updates.showBanner)
         }
         .playbackHUD()
         .onAppear { KeyboardDismisser.shared.install() }

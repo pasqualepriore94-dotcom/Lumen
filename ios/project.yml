@@ -8,13 +8,14 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "0.3.0"
+    MARKETING_VERSION: "0.3.1"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     # Viene impostato dal workflow GitHub con l'URL raw di config/app-config.json
     REMOTE_CONFIG_URL: ""
     # URL della funzione Supabase lumen-auth (variabile AUTH_SERVER_URL del repository GitHub)
     AUTH_SERVER_URL: ""
+    UPDATE_REPO: "pasqualepriore94-dotcom/Lumen"
 
 targets:
   Lumen:
@@ -56,3 +57,4 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         RemoteConfigURL: $(REMOTE_CONFIG_URL)
         AuthServerURL: $(AUTH_SERVER_URL)
+        UpdateRepo: $(UPDATE_REPO)
