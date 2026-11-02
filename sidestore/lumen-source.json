@@ -1,0 +1,26 @@
+{
+  "name": "Lumen",
+  "identifier": "app.lumen.source",
+  "subtitle": "Aggiornamenti di Lumen",
+  "iconURL": "https://raw.githubusercontent.com/pasqualepriore94-dotcom/Lumen/main/ios/Lumen/Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png",
+  "apps": [{
+    "name": "Lumen",
+    "bundleIdentifier": "app.lumen.beta",
+    "developerName": "Pasquale Priore",
+    "subtitle": "Film e serie TV",
+    "localizedDescription": "Catalogo di film e serie in stile Liquid Glass.",
+    "iconURL": "https://raw.githubusercontent.com/pasqualepriore94-dotcom/Lumen/main/ios/Lumen/Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png",
+    "tintColor": "7C5CFF",
+    "versions": [{
+      "version": "0.3.3",
+      "buildVersion": "13",
+      "date": "2026-11-02T10:09:26Z",
+      "localizedDescription": "Build 13",
+      "downloadURL": "https://github.com/pasqualepriore94-dotcom/Lumen/releases/download/v0.3.3-build13/Lumen.ipa",
+      "size": 5625816,
+      "minOSVersion": "17.0"
+    }],
+    "appPermissions": {"entitlements": [], "privacy": {}}
+  }],
+  "news": []
+}
