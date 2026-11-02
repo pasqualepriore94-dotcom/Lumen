@@ -8,7 +8,7 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "0.9.1"
+    MARKETING_VERSION: "0.9.2"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     # Viene impostato dal workflow GitHub con l'URL raw di config/app-config.json
@@ -17,6 +17,9 @@ settings:
     AUTH_SERVER_URL: ""
     UPDATE_REPO: "pasqualepriore94-dotcom/Lumen"
     UPDATE_FEED_URL: ""
+    # Chiavi API passate dai secret di GitHub al momento della compilazione
+    DEFAULT_TMDB_KEY: ""
+    DEFAULT_OMDB_KEY: ""
 
 targets:
   Lumen:
@@ -60,3 +63,5 @@ targets:
         AuthServerURL: $(AUTH_SERVER_URL)
         UpdateRepo: $(UPDATE_REPO)
         UpdateFeedURL: $(UPDATE_FEED_URL)
+        DefaultTMDBKey: $(DEFAULT_TMDB_KEY)
+        DefaultOMDBKey: $(DEFAULT_OMDB_KEY)

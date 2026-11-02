@@ -11,9 +11,9 @@
       "name": "Catalogo film e serie (TMDB)",
       "options": {
         "language": "it-IT",
-        "omdbKey": "823137cf",
+        "omdbKey": "",
         "region": "IT",
-        "tmdbKey": "1b36f5d2503ec79155ce5d9afdb9e57c"
+        "tmdbKey": ""
       },
       "paths": {
         "browse": "",

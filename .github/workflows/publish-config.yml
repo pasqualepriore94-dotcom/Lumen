@@ -17,6 +17,8 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          TMDB_KEY: ${{ secrets.TMDB_API_KEY }}
+          OMDB_KEY: ${{ secrets.OMDB_API_KEY }}
         run: |
-          python3 -c "import json;json.load(open('config/app-config.json'))"
-          tools/publish_supabase.sh "app-config.json" config/app-config.json application/json
+          tools/inject_keys.py config/app-config.json app-config.public.json
+          tools/publish_supabase.sh "app-config.json" app-config.public.json application/json

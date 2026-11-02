@@ -47,6 +47,8 @@ jobs:
         working-directory: ios
         env:
           CONFIG_URL: ${{ secrets.SUPABASE_PROJECT_REF && format('https://{0}.supabase.co/storage/v1/object/public/lumen/app-config.json', secrets.SUPABASE_PROJECT_REF) || '' }}
+          TMDB_KEY: ${{ secrets.TMDB_API_KEY }}
+          OMDB_KEY: ${{ secrets.OMDB_API_KEY }}
           FEED_URL: ${{ secrets.SUPABASE_PROJECT_REF && format('https://{0}.supabase.co/storage/v1/object/public/lumen/lumen-source.json', secrets.SUPABASE_PROJECT_REF) || '' }}
           AUTH_URL: ${{ vars.AUTH_SERVER_URL || (secrets.SUPABASE_PROJECT_REF && format('https://{0}.supabase.co/functions/v1/lumen-auth', secrets.SUPABASE_PROJECT_REF)) || '' }}
         run: |
@@ -62,6 +64,8 @@ jobs:
             AUTH_SERVER_URL="$AUTH_URL" \
             UPDATE_REPO="${{ github.repository }}" \
             UPDATE_FEED_URL="$FEED_URL" \
+            DEFAULT_TMDB_KEY="$TMDB_KEY" \
+            DEFAULT_OMDB_KEY="$OMDB_KEY" \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             build > build.log 2>&1 || STATUS=$?
@@ -94,8 +98,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          TMDB_KEY: ${{ secrets.TMDB_API_KEY }}
+          OMDB_KEY: ${{ secrets.OMDB_API_KEY }}
         run: |
           cp Lumen-unsigned.ipa Lumen.ipa
+          ../tools/inject_keys.py ../config/app-config.json app-config.public.json
           VERSION=$(grep -m1 'MARKETING_VERSION' project.yml | sed 's/.*"\(.*\)".*/\1/')
           TAG="v${VERSION}-build${{ github.run_number }}"
           # Sorgente per SideStore/AltStore: mostra "Aggiorna" quando esce una nuova build
@@ -143,7 +150,7 @@ jobs:
             "Lumen.ipa" Lumen.ipa application/octet-stream \
             "icon.png" icon.png image/png \
             "lumen-source.json" lumen-source.json application/json \
-            "app-config.json" ../config/app-config.json application/json
+            "app-config.json" app-config.public.json application/json
           echo "### IPA pronta" >> "$GITHUB_STEP_SUMMARY"
           echo "$PUBLIC/Lumen.ipa" >> "$GITHUB_STEP_SUMMARY"
 

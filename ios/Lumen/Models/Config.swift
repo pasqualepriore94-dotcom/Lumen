@@ -70,7 +70,7 @@ struct ProviderConfig: Codable, Identifiable, Hashable {
 
     static let tmdb = ProviderConfig(id: "tmdb", name: "Catalogo film e serie (TMDB)", type: .tmdb,
                                      baseURL: "https://api.themoviedb.org/3", paths: .default, headers: [:],
-                                     options: ["tmdbKey": "1b36f5d2503ec79155ce5d9afdb9e57c", "omdbKey": "823137cf", "language": "it-IT", "region": "IT"],
+                                     options: ["tmdbKey": BuildKeys.tmdb, "omdbKey": BuildKeys.omdb, "language": "it-IT", "region": "IT"],
                                      enabled: true)
 
     static func newCustom() -> ProviderConfig {
@@ -152,4 +152,16 @@ struct PlayRequest: Identifiable {
     let item: MediaItem
     let episode: Episode?
     let episodeLabel: String?
+}
+
+/// Chiavi predefinite inserite al momento della compilazione dai secret di GitHub
+/// (TMDB_API_KEY, OMDB_API_KEY): non sono scritte nel codice sorgente.
+enum BuildKeys {
+    static var tmdb: String { value("DefaultTMDBKey") }
+    static var omdb: String { value("DefaultOMDBKey") }
+
+    private static func value(_ key: String) -> String {
+        let v = (Bundle.main.object(forInfoDictionaryKey: key) as? String ?? "").trimmingCharacters(in: .whitespaces)
+        return v.hasPrefix("$(") ? "" : v
+    }
 }
