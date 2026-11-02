@@ -17,6 +17,24 @@ struct DetailView: View {
 
     private var current: MediaItem { detail?.item ?? item }
     private var canStream: Bool { app.provider.capabilities.streams }
+    private var links: LinkLibrary { LinkLibrary.shared }
+    /// Video da link abbinato a questo film.
+    private var movieLink: LinkMedia? { current.isSeries ? nil : links.link(forItem: current.id) }
+
+    private func episodeLink(_ episode: Episode, in detail: MediaDetail) -> LinkMedia? {
+        guard let season = detail.seasons.first(where: { $0.episodes.contains(episode) }) else { return nil }
+        return links.link(seriesId: current.id, season: season.number, episode: episode.number)
+    }
+
+    /// Prima puntata disponibile da link (per il tasto Riproduci delle serie).
+    private var firstLinkedEpisode: (Episode, LinkMedia)? {
+        guard let detail, current.isSeries, links.hasLinks(seriesId: current.id) else { return nil }
+        let resumeId = library.resumeEntry(for: current.id)?.episodeId
+        let all = detail.seasons.flatMap(\.episodes)
+        if let id = resumeId, let e = all.first(where: { $0.id == id }), let l = episodeLink(e, in: detail) { return (e, l) }
+        for e in all { if let l = episodeLink(e, in: detail) { return (e, l) } }
+        return nil
+    }
 
     var body: some View {
         ScrollView {
@@ -102,7 +120,7 @@ struct DetailView: View {
             .overlay(RemoteImage(url: current.bestWideImage))
             .overlay(LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .center, endPoint: .bottom))
             .overlay {
-                if canStream || detail?.trailer != nil {
+                if canStream || movieLink != nil || firstLinkedEpisode != nil || detail?.trailer != nil {
                     Button { primaryAction() } label: {
                         Image(systemName: "play.fill")
                             .font(.system(size: 24))
@@ -167,6 +185,16 @@ struct DetailView: View {
     private var mainActions: some View {
         if canStream {
             PrimaryButton(title: resumeTitle) { primaryAction() }
+        } else if let link = movieLink {
+            PrimaryButton(title: resumeTitle) {
+                Playback.playLink(link, as: current, episodeId: nil, episodeLabel: nil, library: library)
+            }
+        } else if let pair = firstLinkedEpisode, let detail {
+            PrimaryButton(title: library.resumeEntry(for: current.id) != nil ? resumeTitle
+                          : "Riproduci S\(detail.seasons.first { $0.episodes.contains(pair.0) }?.number ?? 1):E\(pair.0.number)") {
+                Playback.playLink(pair.1, as: current, episodeId: pair.0.id, episodeLabel: detail.label(for: pair.0),
+                                  library: library)
+            }
         }
         if let trailer = detail?.trailer {
             if canStream {
@@ -182,6 +210,15 @@ struct DetailView: View {
     }
 
     private func primaryAction() {
+        if !canStream, let link = movieLink {
+            Playback.playLink(link, as: current, episodeId: nil, episodeLabel: nil, library: library)
+            return
+        }
+        if !canStream, let pair = firstLinkedEpisode, let detail {
+            Playback.playLink(pair.1, as: current, episodeId: pair.0.id, episodeLabel: detail.label(for: pair.0),
+                              library: library)
+            return
+        }
         if canStream {
             Task { await Playback.play(item: current, app: app, library: library) }
         } else if let trailer = detail?.trailer {
@@ -435,7 +472,8 @@ struct DetailView: View {
             }
             seasonToggle(seasons[index], detail: detail)
             ForEach(seasons[index].episodes) { episode in
-                EpisodeRow(episode: episode, fallbackImage: current.bestWideImage, playable: canStream,
+                EpisodeRow(episode: episode, fallbackImage: current.bestWideImage,
+                           playable: canStream || episodeLink(episode, in: detail) != nil,
                            download: canStream ? downloads.record(itemId: current.id, episodeId: episode.id) : nil,
                            onDownload: episodeDownloadAction(episode, detail: detail),
                            watched: library.isEpisodeWatched(seriesId: current.id, episodeId: episode.id),
@@ -443,9 +481,14 @@ struct DetailView: View {
                                withAnimation(.snappy) { library.toggleEpisode(episode, item: current, detail: detail) }
                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                            }) {
-                    Task {
-                        await Playback.play(item: current, episode: episode,
-                                            episodeLabel: detail.label(for: episode), app: app, library: library)
+                    if !canStream, let link = episodeLink(episode, in: detail) {
+                        Playback.playLink(link, as: current, episodeId: episode.id,
+                                          episodeLabel: detail.label(for: episode), library: library)
+                    } else {
+                        Task {
+                            await Playback.play(item: current, episode: episode,
+                                                episodeLabel: detail.label(for: episode), app: app, library: library)
+                        }
                     }
                 }
             }

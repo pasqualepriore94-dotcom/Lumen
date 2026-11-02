@@ -53,6 +53,16 @@ enum Playback {
         present(url: media.url, headers: nil, item: media.asItem, episodeId: nil, episodeLabel: nil, library: library)
     }
 
+    /// Riproduce un video da link abbinato a un titolo del catalogo (avanzamento salvato sul titolo).
+    static func playLink(_ media: LinkMedia, as item: MediaItem, episodeId: String?, episodeLabel: String?,
+                         library: Library) {
+        if let local = DownloadManager.shared.localFile(itemId: item.id, episodeId: episodeId) {
+            present(url: local, headers: nil, item: item, episodeId: episodeId, episodeLabel: episodeLabel, library: library)
+            return
+        }
+        present(url: media.url, headers: nil, item: item, episodeId: episodeId, episodeLabel: episodeLabel, library: library)
+    }
+
     private static func present(url: URL, headers: [String: String]?, item: MediaItem, episodeId: String?,
                                 episodeLabel: String?, library: Library) {
         var options: [String: Any] = [:]

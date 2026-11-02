@@ -29,6 +29,7 @@ struct HomeView: View {
                             ContinueWatchingRow(entries: library.continueWatching)
                         }
                         if activeFilter == nil {
+                            ReadyToWatchRow()
                             MyLinksRow()
                         }
                         if activeFilter == nil && !library.myList.isEmpty {

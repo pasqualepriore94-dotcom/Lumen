@@ -84,6 +84,35 @@ struct TMDBProvider: ContentProvider {
         return list.compactMap { item(from: $0, kind: nil, genres: genres) }
     }
 
+    // MARK: Abbinamento per titolo (contenuti da link)
+
+    /// Cerca un titolo nel catalogo; prova prima con l'anno, poi senza.
+    func match(title: String, year: Int?, series: Bool) async throws -> MediaItem? {
+        guard !key.isEmpty, title.count >= 2 else { return nil }
+        let genres = try await genreMap()
+        let path = series ? "/search/tv" : "/search/movie"
+        var attempts: [[String: String]] = []
+        if let year {
+            attempts.append(["query": title, series ? "first_air_date_year" : "year": String(year)])
+        }
+        attempts.append(["query": title])
+        for query in attempts {
+            let json = try await get(path, query.merging(["include_adult": "false"]) { a, _ in a })
+            let list = json["results"] as? [[String: Any]] ?? []
+            if let first = list.first, let item = item(from: first, kind: series ? .series : .movie, genres: genres) {
+                return item
+            }
+        }
+        // Se il tipo indovinato era sbagliato, prova l'altro.
+        if !series, year == nil {
+            let json = try await get("/search/tv", ["query": title])
+            if let first = (json["results"] as? [[String: Any]])?.first {
+                return item(from: first, kind: .series, genres: genres)
+            }
+        }
+        return nil
+    }
+
     // MARK: Catalogo completo
 
     func genres(kind: MediaKind) async throws -> [Genre] {
