@@ -70,7 +70,7 @@ struct ProviderConfig: Codable, Identifiable, Hashable {
 
     static let tmdb = ProviderConfig(id: "tmdb", name: "Catalogo film e serie (TMDB)", type: .tmdb,
                                      baseURL: "https://api.themoviedb.org/3", paths: .default, headers: [:],
-                                     options: ["tmdbKey": "", "omdbKey": "", "language": "it-IT", "region": "IT"],
+                                     options: ["tmdbKey": "1b36f5d2503ec79155ce5d9afdb9e57c", "omdbKey": "823137cf", "language": "it-IT", "region": "IT"],
                                      enabled: true)
 
     static func newCustom() -> ProviderConfig {

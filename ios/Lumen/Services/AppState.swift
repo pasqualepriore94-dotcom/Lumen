@@ -69,6 +69,13 @@ final class AppState {
             if !migrated.providers.contains(where: { $0.type == .tmdb }) {
                 migrated.providers.insert(.tmdb, at: 0)
             }
+            // Chiavi predefinite per le installazioni che non le hanno ancora.
+            for i in migrated.providers.indices where migrated.providers[i].type == .tmdb {
+                for (key, value) in ProviderConfig.tmdb.options where migrated.providers[i].option(key).isEmpty {
+                    migrated.providers[i].options[key] = value
+                }
+            }
+            if migrated.activeProviderId == "demo" { migrated.activeProviderId = "tmdb" }
             config = migrated
         } else {
             config = .default
