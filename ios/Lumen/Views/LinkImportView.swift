@@ -29,7 +29,7 @@ struct LinkImportView: View {
         List {
             inputSection
 
-            if let job.message = job.message {
+            if let message = job.message {
                 Section { Text(message).font(.footnote).foregroundStyle(.secondary) }
             }
 
