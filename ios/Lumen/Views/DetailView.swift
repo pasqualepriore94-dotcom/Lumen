@@ -247,7 +247,6 @@ struct DetailView: View {
         }
     }
 
-    @ViewBuilder
     /// Condivide il link del trailer (WhatsApp, Messaggi, Instagram, ecc.); se non c'è il trailer, il titolo.
     @ViewBuilder
     private var shareButton: some View {
@@ -268,6 +267,7 @@ struct DetailView: View {
         }
     }
 
+    @ViewBuilder
     private var watchedButton: some View {
         if current.isSeries {
             seriesWatchedButton
