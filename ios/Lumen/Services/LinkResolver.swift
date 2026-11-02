@@ -361,6 +361,29 @@ final class LinkLibrary {
 
     func stopMatching() { cancelMatching = true }
 
+    /// Rimuove il video collegato a un titolo del catalogo (film o serie intera).
+    func removeMatch(itemId: String) {
+        movieLinks[itemId] = nil
+        episodeLinks[itemId] = nil
+        matchedItems[itemId] = nil
+        saveMatches()
+    }
+
+    func removeMatches(_ ids: [String]) {
+        for id in ids { movieLinks[id] = nil; episodeLinks[id] = nil; matchedItems[id] = nil }
+        saveMatches()
+    }
+
+    func episodeCount(seriesId: String) -> Int { episodeLinks[seriesId]?.count ?? 0 }
+
+    var matchedMovies: [MediaItem] {
+        matchedItems.values.filter { !$0.isSeries && movieLinks[$0.id] != nil }.sorted { $0.title < $1.title }
+    }
+
+    var matchedSeries: [MediaItem] {
+        matchedItems.values.filter { $0.isSeries && episodeLinks[$0.id] != nil }.sorted { $0.title < $1.title }
+    }
+
     func setMovieLink(_ media: LinkMedia, for item: MediaItem) {
         movieLinks[item.id] = media
         matchedItems[item.id] = item

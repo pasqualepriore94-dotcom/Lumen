@@ -44,6 +44,15 @@ struct LinkImportView: View {
                 }
             }
 
+            Section {
+                NavigationLink {
+                    LinkedContentView()
+                } label: {
+                    Label("Gestisci e rimuovi contenuti caricati (\(links.matchedItems.count + links.items.count))",
+                          systemImage: "list.bullet.rectangle")
+                }
+            }
+
             if !links.items.isEmpty {
                 Section {
                     ForEach(links.items.prefix(200)) { m in savedRow(m) }

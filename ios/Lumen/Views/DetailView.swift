@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 
 struct DetailView: View {
+    @Environment(AuthStore.self) private var auth
     @Environment(AppState.self) private var app
     @Environment(Library.self) private var library
     @Environment(\.dismiss) private var dismiss
@@ -45,6 +46,16 @@ struct DetailView: View {
                     metaRow
                     ratings
                     mainActions
+                    if auth.isAdmin && (movieLink != nil || seriesHasLinks) {
+                        Button(role: .destructive) {
+                            withAnimation { links.removeMatch(itemId: current.id) }
+                        } label: {
+                            Label("Rimuovi video collegato da link", systemImage: "link.badge.minus")
+                                .font(.footnote)
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.red.opacity(0.85))
+                    }
                     if let p = library.resumeEntry(for: current.id), canStream {
                         progressInfo(p)
                     }

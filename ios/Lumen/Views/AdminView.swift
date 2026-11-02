@@ -35,6 +35,16 @@ struct AdminView: View {
                     } label: {
                         Label("Aggiungi contenuto da link", systemImage: "link.badge.plus")
                     }
+                    NavigationLink {
+                        LinkedContentView()
+                    } label: {
+                        HStack {
+                            Label("Gestisci contenuti da link", systemImage: "list.bullet.rectangle")
+                            Spacer()
+                            let n = LinkLibrary.shared.matchedItems.count + LinkLibrary.shared.items.count
+                            if n > 0 { Text("\(n)").foregroundStyle(.secondary) }
+                        }
+                    }
                 } header: {
                     Text("Da link")
                 } footer: {
