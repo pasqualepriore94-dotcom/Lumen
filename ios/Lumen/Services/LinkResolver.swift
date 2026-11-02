@@ -97,9 +97,13 @@ enum LinkResolver {
         var pendingTitle: String?
         var pendingLogo: URL?
         var pendingGroup: String?
+        var pendingDuration: Int?
         for raw in text.components(separatedBy: .newlines) {
             let line = raw.trimmingCharacters(in: .whitespaces)
             if line.hasPrefix("#EXTINF") {
+                // "#EXTINF:-1 ..." = diretta, "#EXTINF:5400 ..." = durata in secondi (on demand)
+                let head = line.dropFirst("#EXTINF:".count).prefix { $0 == "-" || $0.isNumber }
+                pendingDuration = Int(head)
                 pendingTitle = line.components(separatedBy: ",").dropFirst().joined(separator: ",")
                     .trimmingCharacters(in: .whitespaces)
                 if let r = line.range(of: "tvg-logo=\""), let end = line[r.upperBound...].firstIndex(of: "\"") {
@@ -110,16 +114,42 @@ enum LinkResolver {
                 }
             } else if !line.isEmpty, !line.hasPrefix("#"), let u = URL(string: line, relativeTo: base)?.absoluteURL {
                 let title = (pendingTitle?.isEmpty == false ? pendingTitle! : prettyTitle(u))
-                let ext = u.pathExtension.lowercased()
-                let isVOD = ["mp4", "mkv", "m4v", "mov", "avi"].contains(ext) || u.path.contains("/movie/") || u.path.contains("/series/")
+                let isVOD = classifyVOD(url: u, title: title, group: pendingGroup, duration: pendingDuration)
                 items.append(LinkMedia(title: title, url: u, poster: pendingLogo,
                                        isLive: !isVOD, source: "Playlist", group: pendingGroup))
                 pendingTitle = nil
                 pendingLogo = nil
                 pendingGroup = nil
+                pendingDuration = nil
             }
         }
         return items.isEmpty ? .nothing("La playlist è vuota.") : .media(items)
+    }
+
+    /// Riconosce se una voce è on demand (film/episodio) o una diretta, combinando più indizi.
+    static func classifyVOD(url: URL, title: String, group: String?, duration: Int?) -> Bool {
+        let path = url.path.lowercased()
+        let ext = url.pathExtension.lowercased()
+        let g = (group ?? "").lowercased()
+        var score = 0
+        // percorso e formato del file
+        if ["mp4", "mkv", "m4v", "mov", "avi", "webm"].contains(ext) { score += 3 }
+        if path.contains("/movie/") || path.contains("/movies/") || path.contains("/series/") || path.contains("/vod/") { score += 3 }
+        if path.contains("/live/") || ext == "ts" { score -= 3 }
+        // durata dichiarata nella playlist
+        if let duration { score += duration > 0 ? 2 : -1 }
+        // categoria
+        let vodWords = ["film", "movie", "cinema", "serie", "series", "vod", "stagione", "season", "anime", "documentar"]
+        let liveWords = ["live", "diretta", "tv", "canali", "channel", "sport", "news", "radio", "24/7", "rai", "mediaset", "sky"]
+        if vodWords.contains(where: { g.contains($0) }) { score += 2 }
+        if liveWords.contains(where: { g.range(of: "\\b\($0)\\b", options: .regularExpression) != nil }) { score -= 2 }
+        // nome: episodio (S01E02) o anno tra parentesi fanno pensare a un contenuto on demand
+        let parsed = ParsedTitle.parse(title)
+        if parsed.isEpisode { score += 3 }
+        if parsed.year != nil { score += 1 }
+        let upper = title.uppercased()
+        if upper.contains(" HD") && !parsed.isEpisode && parsed.year == nil && score <= 0 { score -= 1 }
+        return score > 0
     }
 
     // MARK: API Lumen
@@ -333,10 +363,13 @@ final class LinkLibrary {
 
     /// Aggiunge i contenuti e abbina quelli on demand al catalogo TMDB cercando per titolo (e anno).
     func importAndMatch(_ list: [LinkMedia], tmdb: TMDBProvider?) async {
-        add(list)
-        guard let tmdb else { return }
+        // Le dirette restano nell'elenco del pannello; i VOD si integrano nelle schede del catalogo.
+        add(list.filter(\.isLive))
         let vods = list.filter { !$0.isLive }
+        guard let tmdb else { add(vods); return }
         guard !vods.isEmpty else { return }
+        var unmatched: [LinkMedia] = []
+        defer { add(unmatched) }
         isMatching = true
         cancelMatching = false
         matchDone = 0
@@ -359,9 +392,9 @@ final class LinkLibrary {
                 cache[cacheKey] = found
             }
             matchDone += 1
-            guard let item = found else { continue }
+            guard let item = found else { unmatched.append(media); continue }
             if item.isSeries {
-                guard let s = parsed.season, let e = parsed.episode else { continue }
+                guard let s = parsed.season, let e = parsed.episode else { unmatched.append(media); continue }
                 episodeLinks[item.id, default: [:]]["s\(s)e\(e)"] = media
             } else {
                 movieLinks[item.id] = media

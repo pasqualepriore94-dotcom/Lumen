@@ -84,52 +84,36 @@ struct LinkImportView: View {
 
             if !found.isEmpty {
                 Section {
-                    HStack {
-                        Button(selected.count == visibleFound.count ? "Deseleziona tutti" : "Seleziona tutti") {
-                            if selected.count == visibleFound.count { selected = [] }
-                            else { selected = Set(visibleFound.map(\.id)) }
-                        }
-                        .buttonStyle(.borderless)
-                        Spacer()
-                        Text("\(selected.count) selezionati").font(.footnote).foregroundStyle(.secondary)
-                    }
                     if found.count > 8 {
                         TextField("Filtra per nome o categoria", text: $filterText)
                             .textInputAutocapitalization(.never)
                     }
-                    Toggle("Abbina al catalogo TMDB (Riproduci nella scheda)", isOn: $matchCatalog)
+                    Toggle("Abbina i VOD al catalogo (Riproduci nella scheda)", isOn: $matchCatalog)
                         .font(.footnote)
                     Button {
                         let chosen = found.filter { selected.contains($0.id) }
                         Task {
                             let tmdb = app.config.providers.first { $0.type == .tmdb && $0.isUsable }.map { TMDBProvider(config: $0) }
                             await links.importAndMatch(chosen, tmdb: matchCatalog ? tmdb : nil)
-                            message = matchCatalog
-                                ? "\(chosen.count) aggiunti · \(links.matchFound) abbinati al catalogo."
-                                : "\(chosen.count) contenuti aggiunti a \"I miei link\"."
+                            let vodCount = chosen.filter { !$0.isLive }.count
+                            let liveCount = chosen.count - vodCount
+                            var parts: [String] = []
+                            if vodCount > 0 { parts.append("\(links.matchFound) VOD su \(vodCount) abbinati al catalogo") }
+                            if liveCount > 0 { parts.append("\(liveCount) dirette salvate nel pannello") }
+                            message = parts.joined(separator: " · ") + "."
                         }
                     } label: {
-                        Label("Aggiungi selezionati (\(selected.count))", systemImage: "tray.and.arrow.down.fill")
+                        Label("Importa selezionati (\(selected.count))", systemImage: "tray.and.arrow.down.fill")
                     }
                     .disabled(selected.isEmpty || links.isMatching)
-                    ForEach(visibleFound) { m in
-                        HStack(spacing: 10) {
-                            Button {
-                                if selected.contains(m.id) { selected.remove(m.id) } else { selected.insert(m.id) }
-                            } label: {
-                                Image(systemName: selected.contains(m.id) ? "checkmark.circle.fill" : "circle")
-                                    .font(.title3)
-                                    .foregroundStyle(selected.contains(m.id) ? app.accent : .secondary)
-                            }
-                            .buttonStyle(.borderless)
-                            mediaRow(m, saved: links.contains(m))
-                        }
-                    }
                 } header: {
-                    Text("Contenuti trovati (\(found.count))")
+                    Text("Trovati \(found.count): \(vods.count) VOD · \(lives.count) live")
                 } footer: {
-                    Text("I contenuti on demand (film ed episodi) vengono cercati per nome nel catalogo: se il titolo esiste, nella sua scheda compare \"Riproduci\". Le dirette restano in \"I miei link\".")
+                    Text("L'app divide da sola i contenuti on demand (film ed episodi) dalle dirette. I VOD vengono cercati per nome nel catalogo: se il titolo esiste, nella sua scheda compare \"Riproduci\".")
                 }
+
+                if !vods.isEmpty { group(title: "VOD · film ed episodi", icon: "film.stack", items: vods) }
+                if !lives.isEmpty { group(title: "Live · dirette", icon: "dot.radiowaves.left.and.right", items: lives) }
             }
 
             if !links.items.isEmpty {
@@ -139,7 +123,7 @@ struct LinkImportView: View {
                 } header: {
                     Text("I miei link (\(links.items.count))")
                 } footer: {
-                    Text("Compaiono anche in Home nella riga \"I miei link\". Scorri a sinistra per eliminarli.")
+                    Text("Dirette e VOD non abbinati al catalogo. Scorri a sinistra per eliminarli.")
                 }
             }
         }
@@ -147,6 +131,43 @@ struct LinkImportView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             if input.isEmpty, let s = UIPasteboard.general.string, s.lowercased().hasPrefix("http") { input = s }
+        }
+    }
+
+    private var vods: [LinkMedia] { visibleFound.filter { !$0.isLive } }
+    private var lives: [LinkMedia] { visibleFound.filter(\.isLive) }
+
+    @ViewBuilder
+    private func group(title: String, icon: String, items: [LinkMedia]) -> some View {
+        let ids = Set(items.map(\.id))
+        let allSelected = ids.isSubset(of: selected)
+        Section {
+            ForEach(items.prefix(300)) { m in
+                HStack(spacing: 10) {
+                    Button {
+                        if selected.contains(m.id) { selected.remove(m.id) } else { selected.insert(m.id) }
+                    } label: {
+                        Image(systemName: selected.contains(m.id) ? "checkmark.circle.fill" : "circle")
+                            .font(.title3)
+                            .foregroundStyle(selected.contains(m.id) ? app.accent : .secondary)
+                    }
+                    .buttonStyle(.borderless)
+                    mediaRow(m, saved: links.contains(m))
+                }
+            }
+            if items.count > 300 {
+                Text("… e altri \(items.count - 300) (inclusi nella selezione)").font(.footnote).foregroundStyle(.secondary)
+            }
+        } header: {
+            HStack {
+                Label("\(title) (\(items.count))", systemImage: icon)
+                Spacer()
+                Button(allSelected ? "Nessuno" : "Tutti") {
+                    if allSelected { selected.subtract(ids) } else { selected.formUnion(ids) }
+                }
+                .font(.caption.bold())
+                .textCase(nil)
+            }
         }
     }
 
@@ -197,7 +218,8 @@ struct LinkImportView: View {
             switch result {
             case .media(let list):
                 found = list
-                selected = Set(list.map(\.id))
+                // Di partenza sono selezionati solo i VOD.
+                selected = Set(list.filter { !$0.isLive }.map(\.id))
                 if list.count == 1 {
                     message = "Trovato un video: tocca ▶︎ per guardarlo o + per salvarlo."
                 }
@@ -211,55 +233,6 @@ struct LinkImportView: View {
     }
 }
 
-/// Riga "I miei link" in Home.
-struct MyLinksRow: View {
-    @Environment(AppState.self) private var app
-    @Environment(Library.self) private var library
-    @State private var links = LinkLibrary.shared
 
-    var body: some View {
-        if !links.items.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                SectionHeader(title: "I miei link")
-                ScrollView(.horizontal) {
-                    LazyHStack(spacing: 10) {
-                        ForEach(links.items) { m in
-                            Button { Playback.playLink(m, app: app, library: library) } label: {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    ZStack {
-                                        ImageTile(url: m.poster, width: 200, height: 112, corner: 14)
-                                        Image(systemName: "play.fill").font(.system(size: 16))
-                                            .frame(width: 40, height: 40)
-                                            .liquidGlass(in: Circle())
-                                    }
-                                    Text(m.title).font(.footnote.weight(.semibold)).lineLimit(1).frame(width: 200, alignment: .leading)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                Button("Rimuovi", systemImage: "trash", role: .destructive) { links.remove(m) }
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                }
-                .scrollIndicators(.hidden)
-            }
-        }
-    }
-}
 
-/// Riga "Pronti da guardare": titoli del catalogo per cui esiste un video da link.
-struct ReadyToWatchRow: View {
-    @State private var links = LinkLibrary.shared
 
-    var body: some View {
-        let items = Array(links.matchedItems.values).sorted { $0.title < $1.title }
-        if !items.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                SectionHeader(title: "Pronti da guardare")
-                PosterRow(items: items, layout: .poster)
-            }
-        }
-    }
-}
