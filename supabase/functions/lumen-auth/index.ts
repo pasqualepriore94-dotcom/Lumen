@@ -1,3 +1,4 @@
+// Lumen auth v0.2.1
 // Funzione Supabase Edge "lumen-auth": account utenti dell'app Lumen.
 // Deploy:  supabase functions deploy lumen-auth --no-verify-jwt
 // Secret:  JWT_SECRET, ADMIN_EMAIL, RESEND_API_KEY  (facoltativi: RESEND_FROM, APP_NAME, NOTIFY_USERS)
