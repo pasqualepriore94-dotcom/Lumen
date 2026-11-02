@@ -27,6 +27,7 @@ struct Achievement: Identifiable, Hashable {
     }
 }
 
+@MainActor
 enum Achievements {
     static func evaluate(_ library: Library) -> [Achievement] {
         let t = library.totals

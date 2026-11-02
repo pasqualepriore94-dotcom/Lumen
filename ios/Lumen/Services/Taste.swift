@@ -36,7 +36,7 @@ struct TasteProfile {
         return min(99, max(35, Int((35 + raw * 64).rounded())))
     }
 
-    static func build(_ library: Library) -> TasteProfile {
+    @MainActor static func build(_ library: Library) -> TasteProfile {
         var p = TasteProfile()
         func add(_ item: MediaItem, weight: Double) {
             for g in item.tags ?? [] {
