@@ -6,3 +6,6 @@ build/
 xcuserdata/
 DerivedData/
 __pycache__/
+ios/Pods/
+ios/*.xcworkspace
+ios/Podfile.lock

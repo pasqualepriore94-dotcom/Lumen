@@ -30,6 +30,19 @@ jobs:
           brew install xcodegen
           xcodegen generate
 
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: pods-${{ runner.os }}-${{ hashFiles('ios/Podfile') }}
+
+      - name: Installa le librerie (VLC per MKV)
+        working-directory: ios
+        run: |
+          which pod || sudo gem install cocoapods
+          pod install --repo-update
+
       - name: Compila (senza firma)
         working-directory: ios
         env:
@@ -39,7 +52,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild \
-            -project Lumen.xcodeproj \
+            -workspace Lumen.xcworkspace \
             -scheme Lumen \
             -configuration Release \
             -sdk iphoneos \

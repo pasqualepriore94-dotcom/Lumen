@@ -16,6 +16,7 @@ struct LinkImportView: View {
     @State private var selected = Set<String>()
     @State private var matchCatalog = true
     @State private var filterText = ""
+    @State private var tab = 0
 
     var body: some View {
         List {
@@ -83,37 +84,53 @@ struct LinkImportView: View {
             }
 
             if !found.isEmpty {
+                // Riepilogo e scelta separata di cosa importare
                 Section {
+                    HStack(spacing: 10) {
+                        countTile("Film", vodMovies.count, "film")
+                        countTile("Episodi", vodEpisodes.count, "tv")
+                        countTile("Live", lives.count, "dot.radiowaves.left.and.right")
+                    }
+                    .listRowInsets(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
+
+                    Picker("Mostra", selection: $tab) {
+                        Text("VOD (\(vods.count))").tag(0)
+                        Text("Live (\(lives.count))").tag(1)
+                    }
+                    .pickerStyle(.segmented)
+
                     if found.count > 8 {
                         TextField("Filtra per nome o categoria", text: $filterText)
                             .textInputAutocapitalization(.never)
                     }
-                    Toggle("Abbina i VOD al catalogo (Riproduci nella scheda)", isOn: $matchCatalog)
-                        .font(.footnote)
-                    Button {
-                        let chosen = found.filter { selected.contains($0.id) }
-                        Task {
-                            let tmdb = app.config.providers.first { $0.type == .tmdb && $0.isUsable }.map { TMDBProvider(config: $0) }
-                            await links.importAndMatch(chosen, tmdb: matchCatalog ? tmdb : nil)
-                            let vodCount = chosen.filter { !$0.isLive }.count
-                            let liveCount = chosen.count - vodCount
-                            var parts: [String] = []
-                            if vodCount > 0 { parts.append("\(links.matchFound) VOD su \(vodCount) abbinati al catalogo") }
-                            if liveCount > 0 { parts.append("\(liveCount) dirette salvate nel pannello") }
-                            message = parts.joined(separator: " · ") + "."
-                        }
-                    } label: {
-                        Label("Importa selezionati (\(selected.count))", systemImage: "tray.and.arrow.down.fill")
-                    }
-                    .disabled(selected.isEmpty || links.isMatching)
                 } header: {
-                    Text("Trovati \(found.count): \(vods.count) VOD · \(lives.count) live")
+                    Text("Trovati \(found.count) contenuti")
                 } footer: {
-                    Text("L'app divide da sola i contenuti on demand (film ed episodi) dalle dirette. I VOD vengono cercati per nome nel catalogo: se il titolo esiste, nella sua scheda compare \"Riproduci\".")
+                    Text("L'app separa da sola i contenuti on demand (film ed episodi di serie) dalle dirette. Puoi importare solo i VOD, solo le live, oppure scegliere voce per voce.")
                 }
 
-                if !vods.isEmpty { group(title: "VOD · film ed episodi", icon: "film.stack", items: vods) }
-                if !lives.isEmpty { group(title: "Live · dirette", icon: "dot.radiowaves.left.and.right", items: lives) }
+                if tab == 0 {
+                    Section {
+                        Toggle("Abbina al catalogo (Riproduci nella scheda)", isOn: $matchCatalog)
+                            .font(.footnote)
+                        importButton(title: "Importa solo i VOD", items: vods.filter { selected.contains($0.id) },
+                                     icon: "film.stack")
+                    }
+                    if !vodMovies.isEmpty { group(title: "Film", icon: "film", items: vodMovies) }
+                    if !vodEpisodes.isEmpty { group(title: "Episodi di serie", icon: "tv", items: vodEpisodes) }
+                    if vods.isEmpty {
+                        Section { Text("Nessun contenuto on demand in questo link.").foregroundStyle(.secondary) }
+                    }
+                } else {
+                    Section {
+                        importButton(title: "Importa solo le live", items: lives.filter { selected.contains($0.id) },
+                                     icon: "dot.radiowaves.left.and.right")
+                    } footer: {
+                        Text("Le dirette non hanno una scheda nel catalogo: restano nell'elenco qui sotto, da cui le avvii.")
+                    }
+                    if !lives.isEmpty { group(title: "Dirette", icon: "dot.radiowaves.left.and.right", items: lives) }
+                    else { Section { Text("Nessuna diretta in questo link.").foregroundStyle(.secondary) } }
+                }
             }
 
             if !links.items.isEmpty {
@@ -135,6 +152,45 @@ struct LinkImportView: View {
     }
 
     private var vods: [LinkMedia] { visibleFound.filter { !$0.isLive } }
+    private var vodEpisodes: [LinkMedia] { vods.filter { ParsedTitle.parse($0.title).isEpisode } }
+    private var vodMovies: [LinkMedia] { vods.filter { !ParsedTitle.parse($0.title).isEpisode } }
+
+    private func countTile(_ title: String, _ count: Int, _ icon: String) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon).foregroundStyle(app.accent)
+            Text("\(count)").font(.title3.bold())
+            Text(title).font(.caption2).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .liquidGlassCard(radius: 16)
+    }
+
+    private func importButton(title: String, items: [LinkMedia], icon: String) -> some View {
+        Button {
+            let chosen = items
+            Task {
+                let tmdb = app.config.providers.first { $0.type == .tmdb && $0.isUsable }.map { TMDBProvider(config: $0) }
+                await links.importAndMatch(chosen, tmdb: matchCatalog ? tmdb : nil)
+                let vodCount = chosen.filter { !$0.isLive }.count
+                let liveCount = chosen.count - vodCount
+                var parts: [String] = []
+                if vodCount > 0 {
+                    parts.append(matchCatalog ? "\(links.matchFound) VOD su \(vodCount) abbinati al catalogo"
+                                              : "\(vodCount) VOD salvati nel pannello")
+                }
+                if liveCount > 0 { parts.append("\(liveCount) dirette salvate nel pannello") }
+                message = parts.joined(separator: " · ") + "."
+            }
+        } label: {
+            HStack {
+                Label("\(title) (\(items.count))", systemImage: icon).font(.body.weight(.semibold))
+                Spacer()
+                if links.isMatching { ProgressView() }
+            }
+        }
+        .disabled(items.isEmpty || links.isMatching)
+    }
     private var lives: [LinkMedia] { visibleFound.filter(\.isLive) }
 
     @ViewBuilder

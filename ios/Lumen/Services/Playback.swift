@@ -65,6 +65,17 @@ enum Playback {
 
     private static func present(url: URL, headers: [String: String]?, item: MediaItem, episodeId: String?,
                                 episodeLabel: String?, library: Library) {
+        // MKV, AVI, WebM e altri formati non supportati da iOS → player VLC.
+        if VLCPlayerViewController.needsVLC(url) {
+            let start = library.resumePosition(itemId: item.id, episodeId: episodeId)
+            let vlc = VLCPlayerViewController(url: url, title: episodeLabel ?? item.title, startAt: start)
+            vlc.onProgress = { position, duration in
+                library.update(item: item, episodeId: episodeId, episodeLabel: episodeLabel,
+                               position: position, duration: duration)
+            }
+            topViewController()?.present(vlc, animated: true)
+            return
+        }
         var options: [String: Any] = [:]
         if let headers, !headers.isEmpty {
             options["AVURLAssetHTTPHeaderFieldsKey"] = headers
