@@ -17,12 +17,16 @@ struct SearchView: View {
         VStack(spacing: 0) {
             TabHeader(title: "Cerca", showsLogo: false)
             searchBar
+            ScrollViewReader { proxy in
             ScrollView {
+                Color.clear.frame(height: 0).id("search-top")
                 if query.trimmingCharacters(in: .whitespaces).isEmpty {
                     recommendedList
                 } else {
                     resultsGrid
                 }
+            }
+            .scrollsToTop(.search, proxy: proxy, anchor: "search-top")
             }
             .scrollDismissesKeyboard(.immediately)
             .scrollIndicators(.hidden)

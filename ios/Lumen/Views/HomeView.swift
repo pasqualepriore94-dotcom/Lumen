@@ -65,6 +65,7 @@ struct HomeView: View {
                     }
             }
             .refreshable { await load() }
+            .scrollsToTop(.home, proxy: proxy, anchor: "top")
         }
         .task(id: app.contentKey) { await load() }
     }

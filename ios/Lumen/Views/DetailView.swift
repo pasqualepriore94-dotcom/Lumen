@@ -165,10 +165,12 @@ struct DetailView: View {
 
     @ViewBuilder
     private var ratings: some View {
-        let hasAny = current.scoreLabel != nil || detail?.imdbRating != nil
+        let match = library.taste.compatibility(current, genres: detail?.genres)
+        let hasAny = current.scoreLabel != nil || detail?.imdbRating != nil || match != nil
         if hasAny {
             GlassGroup(spacing: 8) {
                 HStack(spacing: 8) {
+                    if let match { MatchBadge(percent: match) }
                     if let score = current.scoreLabel {
                         ratingChip(label: "TMDB", value: score, icon: "star.fill", tint: app.accent)
                     }

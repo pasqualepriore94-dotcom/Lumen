@@ -56,6 +56,14 @@ final class AppState {
 
     // Navigazione
     var selectedTab: AppTab = .home
+    /// Toccando un pulsante della barra in basso la schermata torna in cima.
+    var scrollTopSignal = 0
+    var scrollTopTab: AppTab = .home
+
+    func scrollToTop(_ tab: AppTab) {
+        scrollTopTab = tab
+        scrollTopSignal += 1
+    }
     var detailItem: MediaItem? = nil
     var showAdmin = false
     var showCatalog = false

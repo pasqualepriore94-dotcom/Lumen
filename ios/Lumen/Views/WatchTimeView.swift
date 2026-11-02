@@ -69,6 +69,8 @@ struct WatchTimeView: View {
                         proportionBar(t)
                     }
 
+                    TasteSection(taste: library.taste)
+
                     list
                 }
                 .padding(16)
@@ -376,5 +378,67 @@ enum AppIconMemory {
         let current = UIApplication.shared.alternateIconName ?? ""
         guard saved != current else { return }
         UIApplication.shared.setAlternateIconName(saved.isEmpty ? nil : saved) { _ in }
+    }
+}
+
+
+/// "I tuoi gusti": generi preferiti per film e serie, calcolati dai titoli visti.
+struct TasteSection: View {
+    @Environment(AppState.self) private var app
+    let taste: TasteProfile
+
+    var body: some View {
+        if !taste.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Label("I tuoi gusti", systemImage: "heart.text.square.fill").font(.headline)
+                    Spacer()
+                }
+                if let fav = taste.favoriteGenre {
+                    HStack(spacing: 10) {
+                        Image(systemName: "star.fill").foregroundStyle(Color(red: 1, green: 0.8, blue: 0.2))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Genere preferito").font(.caption).foregroundStyle(Theme.secondaryText)
+                            Text(fav).font(.title3.bold())
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("Preferisci").font(.caption).foregroundStyle(Theme.secondaryText)
+                            Text(taste.movieCount == taste.seriesCount ? "Film e serie" : (taste.prefersSeries ? "Le serie TV" : "I film"))
+                                .font(.subheadline.bold())
+                        }
+                    }
+                }
+                genreBars("Film", taste.top(5, series: false), color: Color(red: 0.36, green: 0.62, blue: 1))
+                genreBars("Serie TV", taste.top(5, series: true), color: Color(red: 1, green: 0.48, blue: 0.35))
+                Text("La percentuale \"per te\" su ogni titolo si basa su questi generi.")
+                    .font(.caption2).foregroundStyle(Theme.secondaryText)
+            }
+            .padding(16)
+            .liquidGlassCard(radius: 24)
+        }
+    }
+
+    @ViewBuilder
+    private func genreBars(_ title: String, _ rows: [(genre: String, share: Double)], color: Color) -> some View {
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(color)
+                ForEach(rows, id: \.genre) { r in
+                    HStack(spacing: 8) {
+                        Text(r.genre).font(.caption).frame(width: 110, alignment: .leading).lineLimit(1)
+                        GeometryReader { geo in
+                            Capsule().fill(.white.opacity(0.08))
+                                .overlay(alignment: .leading) {
+                                    Capsule().fill(color.gradient).frame(width: max(6, geo.size.width * r.share))
+                                }
+                        }
+                        .frame(height: 8)
+                        Text("\(Int((r.share * 100).rounded()))%").font(.caption2.monospacedDigit())
+                            .foregroundStyle(Theme.secondaryText).frame(width: 34, alignment: .trailing)
+                    }
+                }
+            }
+        }
     }
 }

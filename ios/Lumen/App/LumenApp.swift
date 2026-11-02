@@ -77,6 +77,7 @@ struct LumenApp: App {
 
 struct RootView: View {
     @Environment(AppState.self) private var app
+    @Environment(Library.self) private var library
     @Environment(UpdateChecker.self) private var updates
 
     var body: some View {
@@ -121,8 +122,13 @@ struct RootView: View {
                 .padding(.top, 4)
                 .animation(.spring(response: 0.4, dampingFraction: 0.8), value: updates.showBanner)
         }
+        .overlay(alignment: .bottom) {
+            AchievementToast().padding(.bottom, Theme.tabBarHeight + 12)
+        }
+        .onChange(of: library.activitySignature) { AchievementTracker.shared.check(library) }
         .playbackHUD()
         .onAppear {
+            AchievementTracker.shared.check(library, announce: false)
             KeyboardDismisser.shared.install()
             AppIconMemory.restoreIfNeeded()
         }
@@ -140,6 +146,7 @@ struct FloatingTabBar: View {
                 ForEach(AppTab.allCases) { tab in
                     Button {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { selection = tab }
+                        app.scrollToTop(tab)
                     } label: {
                         VStack(spacing: 3) {
                             icon(for: tab)

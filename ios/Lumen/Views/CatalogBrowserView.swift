@@ -3,6 +3,7 @@ import SwiftUI
 /// Tutto il catalogo della sorgente attiva, con filtri e scorrimento infinito.
 struct CatalogBrowserView: View {
     @Environment(AppState.self) private var app
+    @Environment(Library.self) private var library
     @Environment(\.dismiss) private var dismiss
 
     @State private var kind: MediaKind = .movie
@@ -116,7 +117,8 @@ struct CatalogBrowserView: View {
     }
 
     private func cell(_ item: MediaItem) -> some View {
-        Color.clear
+        let match = library.taste.compatibility(item)
+        return Color.clear
             .aspectRatio(2.0 / 3.0, contentMode: .fit)
             .overlay(RemoteImage(url: item.bestPosterImage))
             .overlay(alignment: .bottomLeading) {
@@ -134,6 +136,9 @@ struct CatalogBrowserView: View {
                     .liquidGlassCapsule()
                     .padding(5)
                 }
+            }
+            .overlay(alignment: .topLeading) {
+                if let match { MatchBadge(percent: match, compact: true).padding(5) }
             }
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .accessibilityLabel(item.title)

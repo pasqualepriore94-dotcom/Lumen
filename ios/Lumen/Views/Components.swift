@@ -210,6 +210,7 @@ struct PillBadge: View {
 // MARK: - Locandina
 
 struct PosterCard: View {
+    @Environment(Library.self) private var library
     let item: MediaItem
     var width: CGFloat = 112
     var aspect: CGFloat = 2.0 / 3.0
@@ -223,6 +224,9 @@ struct PosterCard: View {
         }
         .overlay(alignment: .topTrailing) {
             if item.rank != nil { TopTenBadge() }
+        }
+        .overlay(alignment: .topLeading) {
+            if let match = library.taste.compatibility(item) { MatchBadge(percent: match, compact: true).padding(5) }
         }
         .frame(width: width, height: width / aspect)
         .contentShape(Rectangle())

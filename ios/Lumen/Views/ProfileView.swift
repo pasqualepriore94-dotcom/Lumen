@@ -8,6 +8,7 @@ struct ProfileView: View {
     @State private var showPassword = false
     @State private var confirmLogout = false
     @State private var showWatchTime = false
+    @State private var showTrophies = false
     @State private var showIconPicker = false
     @State private var showTheme = false
 
@@ -18,9 +19,10 @@ struct ProfileView: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 26) {
-                header
+                header.id("profile-top")
 
                 if !library.continueWatching.isEmpty && app.provider.capabilities.streams {
                     ContinueWatchingRow(entries: library.continueWatching)
@@ -38,6 +40,7 @@ struct ProfileView: View {
                 }
 
                 watchTimeCard
+                trophiesCard
                 if auth.isAdmin { adminCard }
                 settings
 
@@ -49,6 +52,8 @@ struct ProfileView: View {
             .padding(.bottom, Theme.tabBarHeight + 30)
         }
         .scrollIndicators(.hidden)
+        .scrollsToTop(.profile, proxy: proxy, anchor: "profile-top")
+        }
         .safeAreaInset(edge: .top, spacing: 0) {
             TabHeader(title: "Il mio \(app.config.appName)", showsLogo: false)
                 .background {
@@ -65,6 +70,7 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showPassword) { ChangePasswordSheet() }
         .sheet(isPresented: $showWatchTime) { WatchTimeView() }
+        .sheet(isPresented: $showTrophies) { AchievementsView() }
         .sheet(isPresented: $showIconPicker) { AppIconPicker() }
         .sheet(isPresented: $showTheme) { ThemePicker() }
         .confirmationDialog("Vuoi uscire dall'account?", isPresented: $confirmLogout, titleVisibility: .visible) {
@@ -120,6 +126,44 @@ struct ProfileView: View {
         }
         .buttonStyle(GlassButtonStyle(tint: app.accent.opacity(0.35),
                                       shape: AnyShape(RoundedRectangle(cornerRadius: 26, style: .continuous))))
+        .padding(.horizontal, 16)
+    }
+
+    private var trophiesCard: some View {
+        let all = Achievements.evaluate(library)
+        let done = all.filter(\.unlocked)
+        let next = all.filter { !$0.unlocked }.max { $0.fraction < $1.fraction }
+        return Button { showTrophies = true } label: {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label("Trofei e obiettivi", systemImage: "trophy.fill").font(.headline)
+                    Spacer()
+                    Text("\(done.count)/\(all.count)").font(.subheadline.bold()).foregroundStyle(Theme.secondaryText)
+                    Image(systemName: "chevron.right").foregroundStyle(Theme.secondaryText)
+                }
+                HStack(spacing: -8) {
+                    ForEach(done.suffix(6)) { a in
+                        Image(systemName: a.icon).font(.system(size: 14, weight: .semibold)).foregroundStyle(a.color)
+                            .frame(width: 34, height: 34)
+                            .liquidGlass(in: Circle(), tint: a.color.opacity(0.3))
+                    }
+                    if done.isEmpty {
+                        Text("Segna i titoli come visti per sbloccare i primi trofei.")
+                            .font(.caption).foregroundStyle(Theme.secondaryText)
+                    }
+                }
+                if let next {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Prossimo: \(next.title) · \(min(next.current, next.target))/\(next.target)")
+                            .font(.caption).foregroundStyle(Theme.secondaryText)
+                        ProgressView(value: next.fraction).tint(next.color)
+                    }
+                }
+            }
+            .foregroundStyle(.white)
+            .padding(18)
+        }
+        .buttonStyle(GlassButtonStyle(shape: AnyShape(RoundedRectangle(cornerRadius: 26, style: .continuous))))
         .padding(.horizontal, 16)
     }
 
