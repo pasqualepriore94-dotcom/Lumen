@@ -436,6 +436,8 @@ final class LinkLibrary {
         movieLinks = ml; episodeLinks = el; matchedItems = mi
         saveMatches()
         add(unmatched)
+        // Titoli di "La mia lista" diventati guardabili → avviso subito.
+        Task { await WatchlistMonitor.shared.check() }
     }
 
     func setMovieLink(_ media: LinkMedia, for item: MediaItem) {

@@ -95,6 +95,7 @@ final class PlaylistStore {
             persist()
             let added = diff.1
             guard !added.isEmpty else { continue }
+            WatchlistMonitor.shared.playlistAdded(added, playlistName: playlists[i].name)
             let vods = added.filter { !$0.isLive }
             let episodes = vods.filter { ParsedTitle.parse($0.title).isEpisode }.count
             let movies = vods.count - episodes

@@ -8,7 +8,7 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "0.17.1"
+    MARKETING_VERSION: "0.18.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     # Viene impostato dal workflow GitHub con l'URL raw di config/app-config.json
@@ -57,8 +57,10 @@ targets:
         UIBackgroundModes:
           - audio
           - processing
+          - fetch
         BGTaskSchedulerPermittedIdentifiers:
           - $(PRODUCT_BUNDLE_IDENTIFIER).import.*
+          - lumen.watchlist.refresh
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
         ITSAppUsesNonExemptEncryption: false

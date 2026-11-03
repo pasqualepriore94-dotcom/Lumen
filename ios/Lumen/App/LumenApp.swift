@@ -47,6 +47,9 @@ struct LumenApp: App {
                 if scenePhase == .active {
                     Task { await updates.check() }
                     ImportJob.shared.resumeIfNeeded(app: app)
+                    // Nuove uscite ed episodi dei titoli in "La mia lista" (al massimo ogni 3 ore).
+                    WatchlistMonitor.shared.sync(list: library.myList, app: app)
+                    Task { await WatchlistMonitor.shared.checkIfNeeded() }
                     // Nuovi contenuti nelle playlist da link → sezione Notifiche.
                     if auth.isAdmin { Task { await PlaylistStore.shared.checkForUpdates() } }
                 }
@@ -77,6 +80,10 @@ struct LumenApp: App {
                     }
                 }
             }
+        }
+        // Controllo periodico di "La mia lista" anche ad app chiusa (quando iOS lo consente).
+        .backgroundTask(.appRefresh(WatchlistMonitor.refreshTaskId)) {
+            await WatchlistMonitor.runBackgroundRefresh()
         }
     }
 }
@@ -132,6 +139,7 @@ struct RootView: View {
             AchievementToast().padding(.bottom, Theme.tabBarHeight + 12)
         }
         .onChange(of: library.activitySignature) { AchievementTracker.shared.check(library) }
+        .onChange(of: library.myList.map(\.id)) { WatchlistMonitor.shared.sync(list: library.myList, app: app) }
         .playbackHUD()
         .onAppear {
             AchievementTracker.shared.check(library, announce: false)
