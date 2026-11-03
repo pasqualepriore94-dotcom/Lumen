@@ -185,7 +185,9 @@ struct PosterCard: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             ImageTile(url: item.bestPosterImage, width: width, height: width / aspect, corner: 6)
-            if let badge = item.badge {
+            if let fresh = FreshnessStore.shared.badge(for: item.id) {
+                FreshBadge(kind: fresh).padding(.bottom, 6).padding(.horizontal, 4)
+            } else if let badge = item.badge {
                 PillBadge(text: badge).padding(.bottom, 6)
             }
         }

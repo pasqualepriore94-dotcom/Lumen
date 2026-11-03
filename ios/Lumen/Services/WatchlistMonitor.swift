@@ -28,6 +28,18 @@ final class WatchlistMonitor {
         var digitalDate: Date?
         var playable = false            // video collegato (film)
         var linkedEpisodes = 0          // episodi collegati (serie)
+        var lastAir: Date?              // data dell'ultimo episodio uscito (serie)
+        var lastSeason: Int?
+        var lastEpisodeNumber: Int?
+    }
+
+    /// "Nuovo episodio" / "Nuova stagione" per le serie della lista con un'uscita recente.
+    func freshKind(for id: String) -> FreshKind? {
+        guard let s = state.snapshots[id], let air = s.lastAir else { return nil }
+        let age = Date().timeIntervalSince(air)
+        guard age >= 0 else { return nil }
+        if (s.lastEpisodeNumber ?? 0) == 1, (s.lastSeason ?? 0) > 1, age < FreshKind.season.days * 86_400 { return .season }
+        return age < FreshKind.episode.days * 86_400 ? .episode : nil
     }
 
     private struct State: Codable {
@@ -112,6 +124,9 @@ final class WatchlistMonitor {
                         alerts.append(("Nuovo episodio disponibile", "\(item.title) · S\(s) E\(e)\(name).\(ready)", "tv.badge.wifi"))
                     }
                     snap.lastEpisode = key
+                    snap.lastSeason = s
+                    snap.lastEpisodeNumber = e
+                    snap.lastAir = (last["air_date"] as? String).flatMap(Self.parseDay)
                 } else if kind == .movie, let json = try? await tmdb.get("/movie/\(id)", ["append_to_response": "release_dates"]) {
                     let (cinema, digital) = Self.italianDates(json, region: state.tmdb.map { $0.option("region") }.flatMap { $0.isEmpty ? nil : $0 } ?? "IT")
                     snap.cinemaDate = cinema ?? snap.cinemaDate
@@ -194,6 +209,14 @@ final class WatchlistMonitor {
                 .compactMap { ($0["release_date"] as? String).flatMap(parse) }.min()
         }
         return (date([3]) ?? date([2]), date([4]))
+    }
+
+    private static func parseDay(_ s: String) -> Date? {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.date(from: String(s.prefix(10)))
     }
 
     private static func parse(_ s: String) -> Date? {

@@ -87,6 +87,9 @@ struct SectionGridView: View {
             .overlay(alignment: .topLeading) {
                 if let match { MatchBadge(percent: match, compact: true).padding(5) }
             }
+            .overlay(alignment: .bottom) {
+                if let fresh = FreshnessStore.shared.badge(for: item.id) { FreshBadge(kind: fresh, compact: true).padding(6) }
+            }
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .accessibilityLabel(item.title)
     }

@@ -97,7 +97,8 @@ struct SearchView: View {
                         HStack(spacing: 12) {
                             ImageTile(url: item.bestWideImage, width: 132, height: 74, corner: 12)
                                 .overlay(alignment: .bottomLeading) {
-                                    if let badge = item.badge { PillBadge(text: badge).padding(4).scaleEffect(0.85, anchor: .bottomLeading) }
+                                    if let fresh = FreshnessStore.shared.badge(for: item.id) { FreshBadge(kind: fresh, compact: true).padding(4) }
+                                    else if let badge = item.badge { PillBadge(text: badge).padding(4).scaleEffect(0.85, anchor: .bottomLeading) }
                                 }
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(item.title)

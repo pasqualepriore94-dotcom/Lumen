@@ -45,6 +45,7 @@ struct DetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 backdrop
                 VStack(alignment: .leading, spacing: 16) {
+                    if let fresh = FreshnessStore.shared.badge(for: current.id) { FreshBadge(kind: fresh) }
                     Text(current.title).font(.system(size: 28, weight: .bold))
                     metaRow
                     ratings

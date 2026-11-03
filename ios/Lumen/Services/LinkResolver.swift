@@ -431,8 +431,18 @@ final class LinkLibrary {
     /// Importazione in blocco: aggiorna tutto e salva una volta sola (adatto a decine di migliaia di voci).
     func applyBatch(movies: [(LinkMedia, MediaItem)], series: [([String: LinkMedia], MediaItem)], unmatched: [LinkMedia]) {
         var ml = movieLinks, el = episodeLinks, mi = matchedItems
-        for (media, item) in movies { ml[item.id] = media; mi[item.id] = item }
-        for (eps, item) in series { el[item.id, default: [:]].merge(eps) { _, new in new }; mi[item.id] = item }
+        let fresh = FreshnessStore.shared
+        for (media, item) in movies {
+            if ml[item.id] == nil { fresh.mark(item.id, .added) }
+            ml[item.id] = media; mi[item.id] = item
+        }
+        for (eps, item) in series {
+            let before = el[item.id].map { Set($0.keys) }
+            el[item.id, default: [:]].merge(eps) { _, new in new }
+            fresh.recordSeries(item.id, before: before, after: Set(el[item.id].map { Array($0.keys) } ?? []))
+            mi[item.id] = item
+        }
+        fresh.save()
         movieLinks = ml; episodeLinks = el; matchedItems = mi
         saveMatches()
         add(unmatched)
@@ -441,13 +451,17 @@ final class LinkLibrary {
     }
 
     func setMovieLink(_ media: LinkMedia, for item: MediaItem) {
+        if movieLinks[item.id] == nil { FreshnessStore.shared.mark(item.id, .added); FreshnessStore.shared.save() }
         movieLinks[item.id] = media
         matchedItems[item.id] = item
         saveMatches()
     }
 
     func setEpisodeLinks(_ episodes: [String: LinkMedia], for item: MediaItem) {
+        let before = episodeLinks[item.id].map { Set($0.keys) }
         episodeLinks[item.id, default: [:]].merge(episodes) { _, new in new }
+        FreshnessStore.shared.recordSeries(item.id, before: before, after: Set(episodeLinks[item.id].map { Array($0.keys) } ?? []))
+        FreshnessStore.shared.save()
         matchedItems[item.id] = item
         saveMatches()
     }

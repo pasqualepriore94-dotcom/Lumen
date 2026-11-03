@@ -255,6 +255,7 @@ struct HeroCard: View {
             }
             .overlay(alignment: .bottom) {
                 VStack(spacing: 12) {
+                    if let fresh = FreshnessStore.shared.badge(for: item.id) { FreshBadge(kind: fresh) }
                     Text(item.title.uppercased())
                         .font(.system(size: 34, weight: .black, design: .default))
                         .tracking(1)
@@ -351,7 +352,8 @@ struct PosterRow: View {
             VStack(alignment: .leading, spacing: 6) {
                 ImageTile(url: item.bestWideImage, width: 220, height: 124)
                     .overlay(alignment: .bottomLeading) {
-                        if let badge = item.badge { PillBadge(text: badge).padding(6) }
+                        if let fresh = FreshnessStore.shared.badge(for: item.id) { FreshBadge(kind: fresh).padding(6) }
+                        else if let badge = item.badge { PillBadge(text: badge).padding(6) }
                     }
                 Text(item.title).font(.footnote.weight(.semibold)).lineLimit(1).frame(width: 220, alignment: .leading)
             }
