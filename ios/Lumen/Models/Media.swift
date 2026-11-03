@@ -222,6 +222,13 @@ struct WatchProvider: Codable, Hashable, Identifiable {
     }
 }
 
+/// Una data di uscita (al cinema, in TV, in digitale…).
+struct ReleaseInfo: Codable, Hashable {
+    var label: String
+    var date: Date
+    var icon: String = "calendar"
+}
+
 /// Dettaglio di un titolo. Accetta sia `{ "item": {...}, "seasons": [...] }`
 /// sia un oggetto "piatto" con i campi del titolo al primo livello.
 struct MediaDetail: Codable {
@@ -236,9 +243,10 @@ struct MediaDetail: Codable {
     var imdbRating: String?
     var watchProviders: [WatchProvider]
     var watchLink: URL?
+    var releases: [ReleaseInfo] = []
 
     enum CodingKeys: String, CodingKey {
-        case item, seasons, cast, duration, genres, director, trailer, imdbId, imdbRating, watchProviders, watchLink
+        case item, seasons, cast, duration, genres, director, trailer, imdbId, imdbRating, watchProviders, watchLink, releases
     }
 
     init(item: MediaItem, seasons: [Season] = [], cast: [CastMember] = [], duration: Int? = nil,
@@ -266,6 +274,7 @@ struct MediaDetail: Codable {
         imdbRating = c.lossyString(.imdbRating)
         watchProviders = c.lossyArray(WatchProvider.self, .watchProviders)
         watchLink = c.lossyURL(.watchLink)
+        releases = (try? c.decode([ReleaseInfo].self, forKey: .releases)) ?? []
     }
 
     var firstEpisode: Episode? { seasons.first?.episodes.first }

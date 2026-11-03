@@ -45,6 +45,7 @@ struct DetailView: View {
                     Text(current.title).font(.system(size: 28, weight: .bold))
                     metaRow
                     ratings
+                    releasesCard
                     mainActions
                     if auth.isAdmin && (movieLink != nil || seriesHasLinks) {
                         Button(role: .destructive) {
@@ -161,6 +162,45 @@ struct DetailView: View {
         }
         .font(.system(size: 14))
         .foregroundStyle(Theme.secondaryText)
+    }
+
+    @ViewBuilder
+    private var releasesCard: some View {
+        if let list = detail?.releases, !list.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(list, id: \.self) { r in
+                    HStack(spacing: 10) {
+                        Image(systemName: r.icon).foregroundStyle(app.accent).frame(width: 22)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(r.label).font(.caption).foregroundStyle(Theme.secondaryText)
+                            Text(r.date.formatted(.dateTime.day().month(.wide).year().locale(Locale(identifier: "it_IT"))))
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        Spacer()
+                        if let when = Self.relative(r.date) {
+                            Text(when).font(.caption.weight(.bold))
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .liquidGlassCapsule(tint: app.accent.opacity(0.35))
+                        }
+                    }
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .liquidGlassCard(radius: 20)
+        }
+    }
+
+    /// "tra 12 giorni" / "domani" / "oggi" per le date future.
+    private static func relative(_ date: Date) -> String? {
+        let cal = Calendar.current
+        let days = cal.dateComponents([.day], from: cal.startOfDay(for: Date()), to: cal.startOfDay(for: date)).day ?? 0
+        switch days {
+        case ..<0: return nil
+        case 0: return "Oggi"
+        case 1: return "Domani"
+        default: return "Tra \(days) giorni"
+        }
     }
 
     @ViewBuilder

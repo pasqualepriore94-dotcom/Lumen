@@ -251,9 +251,79 @@ struct TMDBProvider: ContentProvider {
         }
 
         let runtime = (json["runtime"] as? Int) ?? (json["episode_run_time"] as? [Int])?.first
-        return MediaDetail(item: base, seasons: seasons, cast: cast, duration: runtime.map { $0 * 60 },
-                           genres: genreNames, director: director, trailer: trailer, imdbId: imdbId,
-                           imdbRating: imdbRating, watchProviders: watch, watchLink: watchLink)
+        var detail = MediaDetail(item: base, seasons: seasons, cast: cast, duration: runtime.map { $0 * 60 },
+                                 genres: genreNames, director: director, trailer: trailer, imdbId: imdbId,
+                                 imdbRating: imdbRating, watchProviders: watch, watchLink: watchLink)
+        detail.releases = isMovie ? movieReleases(json) : seriesReleases(json)
+        return detail
+    }
+
+    // MARK: Date di uscita
+
+    private static func parseDate(_ value: Any?) -> Date? {
+        guard let s = value as? String, !s.isEmpty else { return nil }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = iso.date(from: s) { return d }
+        iso.formatOptions = [.withInternetDateTime]
+        if let d = iso.date(from: s) { return d }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.date(from: String(s.prefix(10)))
+    }
+
+    private func countryName(_ code: String) -> String {
+        Locale(identifier: "it_IT").localizedString(forRegionCode: code) ?? code
+    }
+
+    /// Uscita al cinema nel paese dell'app (Italia), prima uscita mondiale e uscita in digitale.
+    /// Tipi TMDB: 1 anteprima, 2 cinema limitata, 3 cinema, 4 digitale, 5 home video, 6 TV.
+    private func movieReleases(_ json: [String: Any]) -> [ReleaseInfo] {
+        let countries = (json["release_dates"] as? [String: Any])?["results"] as? [[String: Any]] ?? []
+        func dates(_ country: [String: Any], types: Set<Int>) -> [Date] {
+            (country["release_dates"] as? [[String: Any]] ?? [])
+                .filter { types.contains($0["type"] as? Int ?? 0) }
+                .compactMap { Self.parseDate($0["release_date"]) }
+        }
+        var out: [ReleaseInfo] = []
+        let local = countries.first { $0["iso_3166_1"] as? String == region }
+        let localName = countryName(region)
+        let localCinema: Date? = local.flatMap { dates($0, types: [3]).min() ?? dates($0, types: [2]).min() }
+        if let d = localCinema {
+            out.append(ReleaseInfo(label: "Al cinema in \(localName)", date: d, icon: "ticket.fill"))
+        }
+        // Prima uscita al cinema nel mondo
+        var first: (Date, String)?
+        for c in countries {
+            guard let code = c["iso_3166_1"] as? String, let d = (dates(c, types: [3]).min() ?? dates(c, types: [2]).min()) else { continue }
+            if first == nil || d < first!.0 { first = (d, code) }
+        }
+        if let f = first, localCinema == nil || abs(f.0.timeIntervalSince(localCinema!)) > 86_400 * 2 {
+            out.append(ReleaseInfo(label: "Prima uscita al cinema (\(countryName(f.1)))", date: f.0, icon: "globe.europe.africa.fill"))
+        }
+        if out.isEmpty, let d = Self.parseDate(json["release_date"]) {
+            out.append(ReleaseInfo(label: "Data di uscita", date: d, icon: "ticket.fill"))
+        }
+        if let d = local.flatMap({ dates($0, types: [4]).min() }) {
+            out.append(ReleaseInfo(label: "In digitale in \(localName)", date: d, icon: "play.rectangle.fill"))
+        }
+        return out
+    }
+
+    private func seriesReleases(_ json: [String: Any]) -> [ReleaseInfo] {
+        var out: [ReleaseInfo] = []
+        if let d = Self.parseDate(json["first_air_date"]) {
+            out.append(ReleaseInfo(label: "Prima messa in onda", date: d, icon: "tv.fill"))
+        }
+        if let next = json["next_episode_to_air"] as? [String: Any], let d = Self.parseDate(next["air_date"]) {
+            let s = next["season_number"] as? Int ?? 0, e = next["episode_number"] as? Int ?? 0
+            out.append(ReleaseInfo(label: "Prossimo episodio (S\(s) E\(e))", date: d, icon: "calendar.badge.clock"))
+        } else if let d = Self.parseDate(json["last_air_date"]), (json["in_production"] as? Bool) == false {
+            out.append(ReleaseInfo(label: "Ultimo episodio", date: d, icon: "flag.checkered"))
+        }
+        return out
     }
 
     func streams(id: String, episodeId: String?) async throws -> [StreamSource] {
