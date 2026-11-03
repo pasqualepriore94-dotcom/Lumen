@@ -119,7 +119,13 @@ struct TabHeader: View {
                         Image(systemName: "bell").font(.system(size: 16, weight: .semibold))
                             .frame(width: 40, height: 40)
                             .overlay(alignment: .topTrailing) {
-                                Circle().fill(app.accent).frame(width: 9, height: 9).offset(x: -8, y: 8)
+                                if NotificationStore.shared.unread > 0 {
+                                    Text("\(min(99, NotificationStore.shared.unread))")
+                                        .font(.system(size: 9, weight: .heavy)).foregroundStyle(.white)
+                                        .padding(.horizontal, 4).frame(minWidth: 15, minHeight: 15)
+                                        .background(Capsule().fill(app.accent))
+                                        .offset(x: -3, y: 3)
+                                }
                             }
                     }
                     .buttonStyle(GlassButtonStyle(shape: AnyShape(Circle())))
@@ -136,45 +142,6 @@ struct TabHeader: View {
 
 struct DownloadsPlaceholder: View {
     var body: some View { DownloadsView() }
-}
-
-struct NotificationsView: View {
-    @Environment(AppState.self) private var app
-    @Environment(\.dismiss) private var dismiss
-    @State private var items: [MediaItem] = []
-
-    var body: some View {
-        NavigationStack {
-            List(items) { item in
-                Button {
-                    dismiss()
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(450))
-                        app.detailItem = item
-                    }
-                } label: {
-                    HStack(spacing: 12) {
-                        ImageTile(url: item.bestWideImage, width: 110, height: 62)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(item.badge ?? "Novità").font(.caption.bold()).foregroundStyle(app.accent)
-                            Text(item.title).font(.subheadline.bold()).foregroundStyle(.white)
-                        }
-                    }
-                }
-                .listRowBackground(Color.black)
-            }
-            .listStyle(.plain)
-            .overlay { if items.isEmpty { Text("Nessuna novità").foregroundStyle(.secondary) } }
-            .navigationTitle("Notifiche")
-            .navigationBarTitleDisplayMode(.inline)
-        }
-        .presentationDetents([.medium, .large])
-        .preferredColorScheme(.dark)
-        .task {
-            let feed = try? await app.provider.home()
-            items = (feed?.allItems ?? []).filter { $0.badge != nil }
-        }
-    }
 }
 
 // MARK: - Badge

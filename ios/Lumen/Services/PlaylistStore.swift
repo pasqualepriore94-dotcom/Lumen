@@ -12,6 +12,8 @@ struct SavedPlaylist: Codable, Identifiable, Hashable {
     var entries = 0
     var vods = 0
     var lives = 0
+    /// Ultimo controllo automatico dei nuovi contenuti (solo playlist da link).
+    var lastChecked: Date?
 
     var isFromFile: Bool { !origin.lowercased().hasPrefix("http") }
 }
@@ -32,14 +34,88 @@ final class PlaylistStore {
         }
     }
 
-    private static var folder: URL {
+    nonisolated private static var folder: URL {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("playlists", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
-    private static var indexFile: URL { folder.appendingPathComponent("index.json") }
-    private static func textFile(_ id: UUID) -> URL { folder.appendingPathComponent("\(id.uuidString).m3u") }
+    nonisolated private static var indexFile: URL { folder.appendingPathComponent("index.json") }
+    nonisolated private static func textFile(_ id: UUID) -> URL { folder.appendingPathComponent("\(id.uuidString).m3u") }
+    nonisolated private static func pendingFile(_ id: UUID) -> URL { folder.appendingPathComponent("\(id.uuidString)-new.json") }
+
+    /// Voci comparse nell'ultimo aggiornamento automatico e non ancora analizzate.
+    func pendingNew(_ id: UUID) -> [LinkMedia] {
+        guard let data = try? Data(contentsOf: Self.pendingFile(id)) else { return [] }
+        return (try? JSONDecoder().decode([LinkMedia].self, from: data)) ?? []
+    }
+
+    @ObservationIgnored private var checking = false
+
+    /// All'avvio: riscarica le playlist da link (al massimo ogni 6 ore), trova le voci nuove
+    /// e lo segnala nella sezione Notifiche dell'app.
+    func checkForUpdates(force: Bool = false) async {
+        guard !checking else { return }
+        checking = true
+        defer { checking = false }
+        for p in playlists where !p.isFromFile {
+            if !force, let last = p.lastChecked, Date().timeIntervalSince(last) < 6 * 3600 { continue }
+            guard let url = URL(string: p.origin) else { continue }
+            var request = URLRequest(url: url, timeoutInterval: 180)
+            request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Lumen", forHTTPHeaderField: "User-Agent")
+            guard let pair = try? await URLSession.shared.download(for: request),
+                  let http = pair.1 as? HTTPURLResponse, (200..<400).contains(http.statusCode) else { continue }
+            let tmp = pair.0, id = p.id, origin = p.origin
+            // Confronto fuori dal thread principale (playlist anche da decine di migliaia di voci).
+            let diff: (String, [LinkMedia], Int, Int, Int)? = await Task.detached(priority: .utility) {
+                defer { try? FileManager.default.removeItem(at: tmp) }
+                guard let data = try? Data(contentsOf: tmp), let text = PlaylistStore.decode(data),
+                      text.contains("#EXTINF") else { return nil }
+                let fresh = PlaylistStore.parse(text, origin: origin)
+                let oldText = (try? Data(contentsOf: PlaylistStore.textFile(id))).flatMap { PlaylistStore.decode($0) } ?? ""
+                let old = Set(PlaylistStore.parse(oldText, origin: origin).map(\.id))
+                let added = fresh.filter { !old.contains($0.id) }
+                try? text.data(using: .utf8)?.write(to: PlaylistStore.textFile(id), options: .atomic)
+                if !added.isEmpty {
+                    // Somma alle novità già in attesa
+                    var pending = (try? Data(contentsOf: PlaylistStore.pendingFile(id)))
+                        .flatMap { try? JSONDecoder().decode([LinkMedia].self, from: $0) } ?? []
+                    let known = Set(pending.map(\.id))
+                    pending += added.filter { !known.contains($0.id) }
+                    if let out = try? JSONEncoder().encode(pending) { try? out.write(to: PlaylistStore.pendingFile(id), options: .atomic) }
+                }
+                return (text, added, fresh.count, fresh.filter { !$0.isLive }.count, fresh.filter(\.isLive).count)
+            }.value
+            guard let diff, let i = playlists.firstIndex(where: { $0.id == id }) else { continue }
+            playlists[i].lastChecked = Date()
+            playlists[i].entries = diff.2
+            playlists[i].vods = diff.3
+            playlists[i].lives = diff.4
+            if !diff.1.isEmpty { playlists[i].updatedAt = Date() }
+            persist()
+            let added = diff.1
+            guard !added.isEmpty else { continue }
+            let vods = added.filter { !$0.isLive }
+            let episodes = vods.filter { ParsedTitle.parse($0.title).isEpisode }.count
+            let movies = vods.count - episodes
+            let lives = added.count - vods.count
+            var parts: [String] = []
+            if movies > 0 { parts.append(movies == 1 ? "1 film" : "\(movies) film") }
+            if episodes > 0 { parts.append(episodes == 1 ? "1 episodio" : "\(episodes) episodi") }
+            if lives > 0 { parts.append(lives == 1 ? "1 diretta" : "\(lives) dirette") }
+            NotificationStore.shared.post(AppNotification(
+                kind: .newContent,
+                title: "Nuovi contenuti in \(playlists[i].name)",
+                body: parts.joined(separator: ", ") + ".",
+                icon: "sparkles.tv",
+                playlistId: id))
+        }
+    }
+
+    /// Le novità sono state passate all'analisi: non sono più in attesa.
+    func clearPending(_ id: UUID) {
+        try? FileManager.default.removeItem(at: Self.pendingFile(id))
+    }
 
     /// Decodifica il contenuto di un file M3U (UTF-8, con ripiego su Latin-1).
     nonisolated static func decode(_ data: Data) -> String? {
@@ -78,6 +154,7 @@ final class PlaylistStore {
     func delete(_ p: SavedPlaylist, withContent: Bool, library: LinkLibrary = .shared) {
         if withContent { library.removeLinks(Set(media(of: p).map(\.id))) }
         try? FileManager.default.removeItem(at: Self.textFile(p.id))
+        try? FileManager.default.removeItem(at: Self.pendingFile(p.id))
         playlists.removeAll { $0.id == p.id }
         persist()
     }

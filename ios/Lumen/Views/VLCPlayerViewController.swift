@@ -73,7 +73,14 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
 
         player.drawable = videoView
         player.delegate = self
-        player.media = VLCMedia(url: url)
+        let media = VLCMedia(url: url)
+        // Avvio più rapido sui flussi in rete: buffer iniziale ridotto e riconnessione automatica.
+        media.addOptions([
+            "network-caching": 1000,
+            "http-reconnect": true,
+            "http-user-agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Lumen"
+        ])
+        player.media = media
         player.play()
         scheduleHide()
     }

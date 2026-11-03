@@ -301,31 +301,51 @@ final class LinkLibrary {
     private let key = "lumen.linkLibrary"
     private let matchKey = "lumen.linkMatches"
 
-    private struct Matches: Codable {
+    private struct Matches: Codable, Sendable {
         var movies: [String: LinkMedia]
         var episodes: [String: [String: LinkMedia]]
         var items: [String: MediaItem]
     }
 
+    /// true quando i contenuti collegati sono stati letti dal disco (lettura in background all'avvio).
+    private(set) var isLoaded = false
+    @ObservationIgnored private var loadTask: Task<Void, Never>?
+
     private init() {
-        if let data = try? Data(contentsOf: Self.itemsFile),
-           let saved = try? JSONDecoder().decode([LinkMedia].self, from: data) {
-            items = saved
-        } else if let data = UserDefaults.standard.data(forKey: key),
-                  let saved = try? JSONDecoder().decode([LinkMedia].self, from: data) {
-            items = saved
-            save()
-            UserDefaults.standard.removeObject(forKey: key)
-        }
-        if let data = try? Data(contentsOf: Self.matchesFile),
-           let m = try? JSONDecoder().decode(Matches.self, from: data) {
-            movieLinks = m.movies
-            episodeLinks = m.episodes
-            matchedItems = m.items
-        }
+        loadTask = Task { [weak self] in await self?.loadFromDisk() }
     }
 
-    private static var matchesFile: URL {
+    /// Legge elenco e abbinamenti fuori dal thread principale: con decine di migliaia di titoli
+    /// la lettura sincrona rallentava l'apertura delle schede e la comparsa di "Riproduci".
+    func loadIfNeeded() async { await loadTask?.value }
+
+    private func loadFromDisk() async {
+        let itemsURL = Self.itemsFile, matchesURL = Self.matchesFile, legacyKey = key
+        let loaded: ([LinkMedia]?, Matches?) = await Task.detached(priority: .userInitiated) {
+            let decoder = JSONDecoder()
+            let items = (try? Data(contentsOf: itemsURL)).flatMap { try? decoder.decode([LinkMedia].self, from: $0) }
+            let matches = (try? Data(contentsOf: matchesURL)).flatMap { try? decoder.decode(Matches.self, from: $0) }
+            return (items, matches)
+        }.value
+        // Eventuali modifiche fatte nel frattempo hanno la precedenza.
+        if let list = loaded.0 {
+            let known = Set(items.map(\.id))
+            items += list.filter { !known.contains($0.id) }
+        } else if let data = UserDefaults.standard.data(forKey: legacyKey),
+                  let saved = try? JSONDecoder().decode([LinkMedia].self, from: data) {
+            items += saved
+            save()
+            UserDefaults.standard.removeObject(forKey: legacyKey)
+        }
+        if let m = loaded.1 {
+            movieLinks = m.movies.merging(movieLinks) { _, new in new }
+            episodeLinks = m.episodes.merging(episodeLinks) { old, new in old.merging(new) { _, n in n } }
+            matchedItems = m.items.merging(matchedItems) { _, new in new }
+        }
+        isLoaded = true
+    }
+
+    nonisolated private static var matchesFile: URL {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("link-matches.json")
@@ -474,16 +494,38 @@ final class LinkLibrary {
         }
     }
 
-    private static var itemsFile: URL {
+    nonisolated private static var itemsFile: URL {
         matchesFile.deletingLastPathComponent().appendingPathComponent("link-items.json")
     }
 
+    @ObservationIgnored private var saveItemsTask: Task<Void, Never>?
+    @ObservationIgnored private var saveMatchesTask: Task<Void, Never>?
+
+    /// Salvataggio in background e raggruppato (più modifiche ravvicinate = una sola scrittura).
     private func save() {
-        if let data = try? JSONEncoder().encode(items) { try? data.write(to: Self.itemsFile, options: .atomic) }
+        saveItemsTask?.cancel()
+        saveItemsTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard let self, !Task.isCancelled else { return }
+            await self.loadTask?.value   // mai sovrascrivere il file prima di averlo letto
+            let list = self.items, url = Self.itemsFile
+            await Task.detached(priority: .utility) {
+                if let data = try? JSONEncoder().encode(list) { try? data.write(to: url, options: .atomic) }
+            }.value
+        }
     }
 
     private func saveMatches() {
-        let m = Matches(movies: movieLinks, episodes: episodeLinks, items: matchedItems)
-        if let data = try? JSONEncoder().encode(m) { try? data.write(to: Self.matchesFile) }
+        saveMatchesTask?.cancel()
+        saveMatchesTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard let self, !Task.isCancelled else { return }
+            await self.loadTask?.value   // mai sovrascrivere il file prima di averlo letto
+            let m = Matches(movies: self.movieLinks, episodes: self.episodeLinks, items: self.matchedItems)
+            let url = Self.matchesFile
+            await Task.detached(priority: .utility) {
+                if let data = try? JSONEncoder().encode(m) { try? data.write(to: url, options: .atomic) }
+            }.value
+        }
     }
 }

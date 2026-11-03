@@ -83,7 +83,10 @@ enum Playback {
         let asset = AVURLAsset(url: url, options: options)
         let playerItem = AVPlayerItem(asset: asset)
         playerItem.externalMetadata = metadata(title: episodeLabel ?? item.title, subtitle: episodeLabel == nil ? nil : item.title)
+        // Parte appena c'è un minimo di dati invece di riempire prima il buffer.
+        playerItem.preferredForwardBufferDuration = 4
         let player = AVPlayer(playerItem: playerItem)
+        player.automaticallyWaitsToMinimizeStalling = false
 
         let start = library.resumePosition(itemId: item.id, episodeId: episodeId)
         if start > 5 {

@@ -225,6 +225,9 @@ final class ImportJob {
         BackgroundRunner.shared.end(success: true)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         notifyFinished()
+        NotificationStore.shared.post(AppNotification(kind: .analysisDone, title: "Analisi completata",
+                                                      body: "\(sourceName): \(statusText). Tocca per scegliere cosa importare.",
+                                                      icon: "checkmark.seal.fill"))
     }
 
     private func pause() {

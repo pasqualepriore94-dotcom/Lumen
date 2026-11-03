@@ -132,6 +132,10 @@ final class AchievementTracker {
         // Al primo avvio i trofei già raggiunti vengono registrati senza avvisi.
         guard announce, !firstRun, let best = new.max(by: { $0.tier.rawValue < $1.tier.rawValue }) else { return }
         withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) { recent = best }
+        for a in new {
+            NotificationStore.shared.post(AppNotification(kind: .trophy, title: "Trofeo sbloccato: \(a.title)",
+                                                          body: a.detail, icon: "trophy.fill"))
+        }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(4))

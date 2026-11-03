@@ -47,6 +47,8 @@ struct LumenApp: App {
                 if scenePhase == .active {
                     Task { await updates.check() }
                     ImportJob.shared.resumeIfNeeded(app: app)
+                    // Nuovi contenuti nelle playlist da link → sezione Notifiche.
+                    if auth.isAdmin { Task { await PlaylistStore.shared.checkForUpdates() } }
                 }
             }
             .preferredColorScheme(.dark)
@@ -68,6 +70,10 @@ struct LumenApp: App {
                     }
                     group.addTask { @MainActor in
                         await updates.check()
+                    }
+                    group.addTask { @MainActor in
+                        // Contenuti collegati letti in anticipo, così schede e "Riproduci" sono subito pronti.
+                        await LinkLibrary.shared.loadIfNeeded()
                     }
                 }
             }

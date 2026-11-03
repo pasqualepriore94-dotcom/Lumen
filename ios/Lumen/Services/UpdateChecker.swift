@@ -53,6 +53,12 @@ final class UpdateChecker {
         }
         available = Update(version: (latest["version"] as? String) ?? "", build: build, ipaURL: ipaURL,
                            notes: (latest["localizedDescription"] as? String) ?? "")
+        if UserDefaults.standard.integer(forKey: "lumen.notifiedUpdate") != build {
+            UserDefaults.standard.set(build, forKey: "lumen.notifiedUpdate")
+            NotificationStore.shared.post(AppNotification(kind: .update, title: "Nuovo aggiornamento disponibile",
+                                                          body: "Versione \((latest["version"] as? String) ?? "") (build \(build)). Installalo dal banner in alto o da SideStore.",
+                                                          icon: "arrow.down.app.fill"))
+        }
     }
 
     func dismiss() {

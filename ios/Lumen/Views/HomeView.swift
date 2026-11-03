@@ -186,23 +186,33 @@ private extension View {
 struct HeroCarousel: View {
     @Environment(AppState.self) private var app
     let items: [MediaItem]
-    @State private var index = 0
+    @State private var position: Int? = 0
     @State private var lastInteraction = Date()
     @State private var autoAdvancing = false
 
+    private var index: Int { position ?? 0 }
     private var cardHeight: CGFloat { (UIScreen.main.bounds.width - 32) / 0.7 }
 
     var body: some View {
         VStack(spacing: 10) {
-            TabView(selection: $index) {
-                ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
-                    HeroCard(item: item).tag(i)
+            // Scorrimento a pagine orizzontale (al posto di TabView, che dentro la home
+            // a volte si posizionava qualche punto più in basso al primo caricamento).
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 0) {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
+                        HeroCard(item: item)
+                            .containerRelativeFrame(.horizontal)
+                            .id(i)
+                    }
                 }
+                .scrollTargetLayout()
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .frame(height: cardHeight + 30)
-            // Nessun gesto aggiuntivo sullo slider: lo scorrimento verticale della home resta libero.
-            .onChange(of: index) {
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $position)
+            .scrollIndicators(.hidden)
+            .scrollClipDisabled()
+            .frame(height: cardHeight)
+            .onChange(of: position) {
                 if autoAdvancing { autoAdvancing = false } else { lastInteraction = Date() }
             }
 
@@ -215,14 +225,15 @@ struct HeroCarousel: View {
                     }
                 }
                 .animation(.snappy, value: index)
+                .padding(.top, 6)
             }
         }
-        .onChange(of: items.map(\.id)) { index = 0 }
+        .onChange(of: items.map(\.id)) { position = 0 }
         // Scorre da solo ogni 5 secondi; dopo uno slide manuale aspetta qualche secondo in più.
         .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
             guard items.count > 1, Date().timeIntervalSince(lastInteraction) > 4.5 else { return }
             autoAdvancing = true
-            withAnimation(.easeInOut(duration: 0.7)) { index = (index + 1) % items.count }
+            withAnimation(.easeInOut(duration: 0.7)) { position = (index + 1) % items.count }
         }
     }
 }
