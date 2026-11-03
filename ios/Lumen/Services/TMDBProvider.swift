@@ -255,6 +255,20 @@ struct TMDBProvider: ContentProvider {
                                  genres: genreNames, director: director, trailer: trailer, imdbId: imdbId,
                                  imdbRating: imdbRating, watchProviders: watch, watchLink: watchLink)
         detail.releases = isMovie ? movieReleases(json) : seriesReleases(json)
+        // Saga (Harry Potter, Il Signore degli Anelli, …): tutti i film in ordine di uscita.
+        if isMovie, let coll = json["belongs_to_collection"] as? [String: Any], let cid = coll["id"] as? Int,
+           let cjson = try? await get("/collection/\(cid)") {
+            let genres = (try? await genreMap()) ?? [:]
+            let parts = (cjson["parts"] as? [[String: Any]] ?? []).sorted {
+                let a = $0["release_date"] as? String ?? "", b = $1["release_date"] as? String ?? ""
+                return (a.isEmpty ? "9999" : a) < (b.isEmpty ? "9999" : b)
+            }
+            let items = parts.compactMap { item(from: $0, kind: .movie, genres: genres) }
+            if items.count > 1 {
+                detail.collectionName = (cjson["name"] as? String) ?? (coll["name"] as? String)
+                detail.collection = items
+            }
+        }
         return detail
     }
 

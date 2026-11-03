@@ -15,6 +15,7 @@ struct DetailView: View {
     @State private var expandedOverview = false
     @State private var watchSummary: WatchedEntry?
     @State private var trailer: TrailerItem?
+    @State private var sagaItem: MediaItem?
     @State private var previewPlaying = false
     @State private var previewMuted = true
     @State private var previewPaused = false
@@ -67,6 +68,9 @@ struct DetailView: View {
                     overview
                     credits
                     actions
+                    if let detail, detail.collection.count > 1 {
+                        sagaSection(detail)
+                    }
                     if let detail, !detail.cast.isEmpty {
                         castCarousel(detail.cast)
                     }
@@ -117,6 +121,7 @@ struct DetailView: View {
         .preferredColorScheme(.dark)
         .playbackHUD()
         .sheet(item: $watchSummary) { WatchTimeView(highlight: $0) }
+        .sheet(item: $sagaItem) { DetailView(item: $0) }
         .fullScreenCover(item: $trailer) { t in
             TrailerPlayerView(title: current.title, url: t.url)
         }
@@ -180,6 +185,58 @@ struct DetailView: View {
         }
         .font(.system(size: 14))
         .foregroundStyle(Theme.secondaryText)
+    }
+
+    /// Gli altri film della stessa saga, in ordine di uscita, con il capitolo attuale evidenziato.
+    private func sagaSection(_ detail: MediaDetail) -> some View {
+        let parts = detail.collection
+        let index = parts.firstIndex { $0.id == current.id }
+        return VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(detail.collectionName ?? "La saga").font(.headline)
+                Text(index.map { "Capitolo \($0 + 1) di \(parts.count)" + ($0 + 1 < parts.count ? " · guarda i successivi" : "") }
+                     ?? "\(parts.count) film")
+                    .font(.caption).foregroundStyle(Theme.secondaryText)
+            }
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal) {
+                    LazyHStack(alignment: .top, spacing: 10) {
+                        ForEach(Array(parts.enumerated()), id: \.element.id) { i, part in
+                            let isCurrent = part.id == current.id
+                            Button { if !isCurrent { sagaItem = part } } label: {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    PosterCard(item: part, width: 104)
+                                        .overlay {
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .stroke(isCurrent ? app.accent : .clear, lineWidth: 2.5)
+                                        }
+                                        .overlay(alignment: .topTrailing) {
+                                            Text("\(i + 1)")
+                                                .font(.system(size: 11, weight: .heavy))
+                                                .frame(width: 22, height: 22)
+                                                .background(isCurrent ? app.accent : .black.opacity(0.6), in: Circle())
+                                                .padding(4)
+                                        }
+                                    Text(isCurrent ? "Stai guardando" : (part.year.map(String.init) ?? ""))
+                                        .font(.caption2.weight(isCurrent ? .bold : .regular))
+                                        .foregroundStyle(isCurrent ? app.accent : Theme.secondaryText)
+                                    if links.link(forItem: part.id) != nil {
+                                        Label("Disponibile", systemImage: "play.fill")
+                                            .font(.system(size: 9, weight: .bold)).foregroundStyle(.green)
+                                    }
+                                }
+                                .frame(width: 104, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                            .id(part.id)
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                }
+                .scrollIndicators(.hidden)
+                .onAppear { proxy.scrollTo(current.id, anchor: .leading) }
+            }
+        }
     }
 
     @ViewBuilder

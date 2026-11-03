@@ -244,9 +244,13 @@ struct MediaDetail: Codable {
     var watchProviders: [WatchProvider]
     var watchLink: URL?
     var releases: [ReleaseInfo] = []
+    /// Saga a cui appartiene il film (es. "Harry Potter - La saga"), con tutti i capitoli in ordine di uscita.
+    var collectionName: String?
+    var collection: [MediaItem] = []
 
     enum CodingKeys: String, CodingKey {
         case item, seasons, cast, duration, genres, director, trailer, imdbId, imdbRating, watchProviders, watchLink, releases
+        case collectionName, collection
     }
 
     init(item: MediaItem, seasons: [Season] = [], cast: [CastMember] = [], duration: Int? = nil,
@@ -275,6 +279,8 @@ struct MediaDetail: Codable {
         watchProviders = c.lossyArray(WatchProvider.self, .watchProviders)
         watchLink = c.lossyURL(.watchLink)
         releases = (try? c.decode([ReleaseInfo].self, forKey: .releases)) ?? []
+        collectionName = c.lossyString(.collectionName)
+        collection = c.lossyArray(MediaItem.self, .collection)
     }
 
     var firstEpisode: Episode? { seasons.first?.episodes.first }

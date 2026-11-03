@@ -37,6 +37,9 @@ struct HomeView: View {
                                 PosterRow(items: library.myList, layout: .poster)
                             }
                         }
+                        if activeFilter == nil && !LinkLibrary.shared.lives.isEmpty {
+                            LiveChannelsRow(channels: LinkLibrary.shared.lives).id("dirette")
+                        }
                         ForEach(filteredSections(feed)) { section in
                             SectionRow(section: section).id(section.id)
                         }

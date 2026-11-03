@@ -202,11 +202,11 @@ struct LinkImportView: View {
             Button {
                 importAll()
             } label: {
-                Label("Importa film e serie selezionati (\(job.selMovies.count + job.selSeries.count))",
+                Label("Importa selezionati (\(job.selMovies.count) film · \(job.selSeries.count) serie · \(job.selLives.count) dirette)",
                       systemImage: "tray.and.arrow.down.fill")
                     .font(.body.weight(.semibold))
             }
-            .disabled(job.selMovies.isEmpty && job.selSeries.isEmpty)
+            .disabled(job.selMovies.isEmpty && job.selSeries.isEmpty && job.selLives.isEmpty)
         } header: {
             Text("Contenuti trovati")
         } footer: {
@@ -285,14 +285,14 @@ struct LinkImportView: View {
                 Button {
                     let chosen = mapper.lives.filter { job.selLives.contains($0.id) }
                     links.add(chosen)
-                    job.message = "\(chosen.count) dirette salvate nel pannello."
+                    job.message = "\(chosen.count) dirette aggiunte alla categoria Dirette della home."
                     job.selLives = []
                 } label: {
                     Label("Importa solo le live selezionate (\(job.selLives.count))", systemImage: "dot.radiowaves.left.and.right")
                 }
                 .disabled(job.selLives.isEmpty)
             } footer: {
-                Text("Le dirette non hanno una scheda nel catalogo: restano nell'elenco del pannello, da cui le avvii.")
+                Text("Le dirette importate compaiono nella categoria Dirette della home, divise per gruppo, e si avviano con un tocco.")
             }
             Section {
                 ForEach(visibleLives.prefix(400)) { m in
@@ -394,12 +394,15 @@ struct LinkImportView: View {
     private func importAll() {
         let movies = mapper.movies.filter { job.selMovies.contains($0.id) }
         let series = mapper.series.filter { job.selSeries.contains($0.id) }
-        links.applyMapping(movies: movies, series: series, lives: [])
+        let lives = mapper.lives.filter { job.selLives.contains($0.id) }
+        links.applyMapping(movies: movies, series: series, lives: lives)
         let mFound = movies.filter { $0.match != nil }.count
         let sFound = series.filter { $0.match != nil }.count
         let eps = series.filter { $0.match != nil }.reduce(0) { $0 + $1.episodes.count }
         job.message = "Importati \(mFound) film e \(sFound) serie (\(eps) episodi) nel catalogo. "
+            + (lives.isEmpty ? "" : "\(lives.count) dirette aggiunte alla categoria Dirette. ")
             + "I non trovati (\(movies.count - mFound + series.count - sFound)) sono nell'elenco del pannello."
+        job.selLives.subtract(lives.map(\.id))
         job.selMovies.subtract(movies.map(\.id))
         job.selSeries.subtract(series.map(\.id))
         UINotificationFeedbackGenerator().notificationOccurred(.success)
