@@ -413,20 +413,25 @@ struct ContinueWatchingRow: View {
             HStack {
                 Button { app.detailItem = entry.item } label: {
                     Image(systemName: "info.circle")
+                        .frame(width: 44, height: 36, alignment: .leading)
+                        .contentShape(Rectangle())
                 }
-                Spacer()
+                Spacer(minLength: 0)
                 Menu {
                     Button("Dettagli", systemImage: "info.circle") { app.detailItem = entry.item }
                     Button("Rimuovi dalla riga", systemImage: "xmark", role: .destructive) {
                         withAnimation { library.removeProgress(entry.item.id) }
                     }
                 } label: {
+                    // Area di tocco ampia: non serve centrare i puntini.
                     Image(systemName: "ellipsis").rotationEffect(.degrees(90))
+                        .frame(width: 52, height: 36, alignment: .trailing)
+                        .contentShape(Rectangle())
                 }
             }
             .font(.system(size: 16))
             .foregroundStyle(.white)
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 6)
             .frame(height: 36)
             .background(.ultraThinMaterial)
         }

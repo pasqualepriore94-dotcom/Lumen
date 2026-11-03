@@ -33,23 +33,27 @@ struct LinkedContentView: View {
 
             let movies = filtered(links.matchedMovies)
             if !movies.isEmpty {
-                Section("Film nel catalogo (\(movies.count))") {
+                Section {
                     ForEach(movies) { item in
                         row(item, detail: "Riproduci attivo nella scheda")
                             .tag("m:" + item.id)
                             .swipeActions { removeButton { links.removeMatch(itemId: item.id) } }
                     }
+                } header: {
+                    sectionHeader("Film nel catalogo", tags: Set(movies.map { "m:" + $0.id }))
                 }
             }
 
             let series = filtered(links.matchedSeries)
             if !series.isEmpty {
-                Section("Serie nel catalogo (\(series.count))") {
+                Section {
                     ForEach(series) { item in
                         row(item, detail: "\(links.episodeCount(seriesId: item.id)) episodi collegati")
                             .tag("s:" + item.id)
                             .swipeActions { removeButton { links.removeMatch(itemId: item.id) } }
                     }
+                } header: {
+                    sectionHeader("Serie nel catalogo", tags: Set(series.map { "s:" + $0.id }))
                 }
             }
 
@@ -68,7 +72,11 @@ struct LinkedContentView: View {
                         .swipeActions { removeButton { links.remove(m) } }
                     }
                 } header: {
-                    Text("Dirette e non abbinati (\(others.count))")
+                    sectionHeader("Dirette e non abbinati", tags: Set(others.map { "l:" + $0.id }))
+                } footer: {
+                    if others.count > 500 {
+                        Text("Mostrati i primi 500 di \(others.count). \"Tutti\" seleziona anche quelli non mostrati.")
+                    }
                 }
             }
 
@@ -95,6 +103,14 @@ struct LinkedContentView: View {
                 .disabled(total == 0)
             }
             if editMode.isEditing {
+                ToolbarItem(placement: .topBarLeading) {
+                    let all = allTags
+                    Button(!all.isEmpty && all.isSubset(of: selection) ? "Deseleziona" : "Seleziona tutti") {
+                        withAnimation {
+                            if !all.isEmpty && all.isSubset(of: selection) { selection = [] } else { selection = all }
+                        }
+                    }
+                }
                 ToolbarItem(placement: .bottomBar) {
                     Button("Rimuovi selezionati (\(selection.count))", role: .destructive) { confirmSelected = true }
                         .disabled(selection.isEmpty)
@@ -127,6 +143,29 @@ struct LinkedContentView: View {
         }
     }
 
+    /// Tutti i contenuti visibili con la ricerca attuale (anche oltre i primi 500 dell'elenco).
+    private var allTags: Set<String> {
+        Set(filtered(links.matchedMovies).map { "m:" + $0.id })
+            .union(filtered(links.matchedSeries).map { "s:" + $0.id })
+            .union(others.map { "l:" + $0.id })
+    }
+
+    @ViewBuilder
+    private func sectionHeader(_ title: String, tags: Set<String>) -> some View {
+        HStack {
+            Text("\(title) (\(tags.count))")
+            Spacer()
+            if editMode.isEditing {
+                let all = !tags.isEmpty && tags.isSubset(of: selection)
+                Button(all ? "Nessuno" : "Tutti") {
+                    withAnimation { if all { selection.subtract(tags) } else { selection.formUnion(tags) } }
+                }
+                .font(.caption.bold())
+                .textCase(nil)
+            }
+        }
+    }
+
     @State private var shown: MediaItem?
     private func openDetail(_ item: MediaItem) { shown = item }
 
@@ -138,14 +177,16 @@ struct LinkedContentView: View {
 
     private func removeSelected() {
         var matchIds: [String] = []
+        var linkIds = Set<String>()
         for tag in selection {
             if tag.hasPrefix("m:") || tag.hasPrefix("s:") {
                 matchIds.append(String(tag.dropFirst(2)))
             } else if tag.hasPrefix("l:") {
-                let id = String(tag.dropFirst(2))
-                if let m = links.items.first(where: { $0.id == id }) { links.remove(m) }
+                linkIds.insert(String(tag.dropFirst(2)))
             }
         }
+        // Rimozione in blocco (un solo salvataggio anche con migliaia di voci).
+        links.removeLinks(linkIds)
         links.removeMatches(matchIds)
         selection = []
         withAnimation { editMode = .inactive }
