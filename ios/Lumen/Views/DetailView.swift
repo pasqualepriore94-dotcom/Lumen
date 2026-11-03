@@ -15,6 +15,9 @@ struct DetailView: View {
     @State private var expandedOverview = false
     @State private var watchSummary: WatchedEntry?
     @State private var trailer: TrailerItem?
+    @State private var previewPlaying = false
+    @State private var previewMuted = true
+    @State private var previewPaused = false
 
     private var current: MediaItem { detail?.item ?? item }
     private var canStream: Bool { app.provider.capabilities.streams }
@@ -126,11 +129,41 @@ struct DetailView: View {
 
     // MARK: Testata
 
+    private var previewId: String? { detail?.trailer.flatMap { TrailerPlayerView.videoId(from: $0) } }
+
     private var backdrop: some View {
         Color.clear
             .aspectRatio(16.0 / 9.0, contentMode: .fit)
             .overlay(RemoteImage(url: current.bestWideImage))
-            .overlay(LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .center, endPoint: .bottom))
+            .overlay {
+                // Il trailer parte da solo in anteprima, senza audio.
+                if let id = previewId {
+                    TrailerPreview(videoId: id, muted: previewMuted, paused: previewPaused || trailer != nil,
+                                   playing: $previewPlaying)
+                        .opacity(previewPlaying ? 1 : 0)
+                        .animation(.easeInOut(duration: 0.6), value: previewPlaying)
+                        .allowsHitTesting(false)
+                }
+            }
+            .overlay(LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .center, endPoint: .bottom)
+                .allowsHitTesting(false))
+            .overlay(alignment: .bottomTrailing) {
+                if previewPlaying {
+                    HStack(spacing: 8) {
+                        Text("Trailer").font(.caption2.weight(.bold))
+                            .padding(.horizontal, 8).padding(.vertical, 4)
+                            .liquidGlassCapsule()
+                        Button { previewMuted.toggle() } label: {
+                            Image(systemName: previewMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                                .font(.system(size: 13, weight: .semibold)).frame(width: 34, height: 34)
+                        }
+                        .buttonStyle(GlassButtonStyle(shape: AnyShape(Circle())))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(12)
+                    .transition(.opacity)
+                }
+            }
             .overlay {
                 if canStream || movieLink != nil || firstLinkedEpisode != nil || detail?.trailer != nil {
                     Button { primaryAction() } label: {
@@ -263,6 +296,7 @@ struct DetailView: View {
     }
 
     private func primaryAction() {
+        previewPaused = true
         if !canStream, let link = movieLink {
             Playback.playLink(link, as: current, episodeId: nil, episodeLabel: nil, library: library)
             return

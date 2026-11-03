@@ -11,12 +11,14 @@ struct ClipsView: View {
     @State private var currentId: String?
     @State private var muted = false
     @State private var errorMessage: String?
+    @State private var links = LinkLibrary.shared
+    @State private var fromPlaylist = false
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
             if clips.isEmpty {
-                if !app.provider.capabilities.clips {
+                if !app.provider.capabilities.clips && !ClipFeed.hasLinkContent {
                     VStack(spacing: 14) {
                         Image(systemName: "play.rectangle.on.rectangle").font(.system(size: 44))
                         Text("Clip non disponibili").font(.title3.bold())
@@ -48,12 +50,38 @@ struct ClipsView: View {
                 .scrollPosition(id: $currentId)
                 .scrollIndicators(.hidden)
                 .ignoresSafeArea()
+                .overlay(alignment: .topLeading) {
+                    if fromPlaylist {
+                        Button {
+                            withAnimation { clips = ClipFeed.build(taste: library.taste); currentId = clips.first?.id }
+                        } label: {
+                            Label("Dalla tua playlist · Mescola", systemImage: "shuffle")
+                                .font(.caption.weight(.semibold))
+                                .padding(.horizontal, 12).padding(.vertical, 8)
+                        }
+                        .buttonStyle(GlassButtonStyle())
+                        .foregroundStyle(.white)
+                        .padding(.top, 56).padding(.leading, 16)
+                    }
+                }
             }
         }
-        .task(id: app.contentKey) { await load() }
+        .task(id: "\(app.contentKey)|\(links.matchedItems.count)|\(links.items.count)") { await load() }
     }
 
+    @Environment(Library.self) private var library
+
     private func load() async {
+        // Prima i contenuti della playlist caricata, proposti in base ai gusti.
+        let fromLinks = ClipFeed.build(taste: library.taste)
+        if !fromLinks.isEmpty {
+            fromPlaylist = true
+            clips = fromLinks
+            if currentId == nil || !fromLinks.contains(where: { $0.id == currentId }) { currentId = fromLinks.first?.id }
+            errorMessage = nil
+            return
+        }
+        fromPlaylist = false
         guard app.provider.capabilities.clips else { clips = []; return }
         do {
             let result = try await app.provider.clips()
@@ -77,10 +105,30 @@ final class LoopingPlayer {
     @ObservationIgnored private var timeToken: Any? = nil
     var progress: Double = 0
     var remaining: Double = 0
+    @ObservationIgnored var wantsPlay = false
 
-    init(url: URL) {
-        let item = AVPlayerItem(url: url)
-        looper = AVPlayerLooper(player: player, templateItem: item)
+    /// `preview`: per film ed episodi interi riproduce in loop un estratto (da circa un quarto della durata).
+    init(url: URL, preview: Bool = false) {
+        if preview {
+            Task { @MainActor [weak self] in
+                let asset = AVURLAsset(url: url)
+                let duration = (try? await asset.load(.duration))?.seconds ?? 0
+                guard let self, self.timeToken != nil else { return }
+                let item = AVPlayerItem(asset: asset)
+                if duration.isFinite, duration > 120 {
+                    let start = CMTime(seconds: duration * 0.25, preferredTimescale: 600)
+                    let length = CMTime(seconds: min(90, duration * 0.1), preferredTimescale: 600)
+                    self.looper = AVPlayerLooper(player: self.player, templateItem: item,
+                                                 timeRange: CMTimeRange(start: start, duration: length))
+                } else {
+                    self.looper = AVPlayerLooper(player: self.player, templateItem: item)
+                }
+                if self.wantsPlay { self.player.play() }
+            }
+        } else {
+            let item = AVPlayerItem(url: url)
+            looper = AVPlayerLooper(player: player, templateItem: item)
+        }
         timeToken = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.25, preferredTimescale: 600),
                                                    queue: .main) { [weak self] time in
             MainActor.assumeIsolated {
@@ -117,10 +165,13 @@ struct ClipPage: View {
         ZStack {
             Color.black
             if let looping {
+                RemoteImage(url: clip.item.bestWideImage)
                 PlayerLayerView(player: looping.player)
                     .onTapGesture { paused.toggle() }
             } else {
                 RemoteImage(url: clip.item.bestWideImage)
+                    .scaleEffect(isCurrent ? 1.12 : 1)
+                    .animation(.easeInOut(duration: 12).repeatForever(autoreverses: true), value: isCurrent)
             }
             if paused {
                 Image(systemName: "play.fill")
@@ -145,13 +196,29 @@ struct ClipPage: View {
         }
     }
 
+    /// I formati che iOS non riproduce in linea (MKV, AVI…) mostrano l'immagine e il pulsante Riproduci.
+    private var inlinePlayable: Bool { !VLCPlayerViewController.needsVLC(clip.video) }
+
     private func syncPlayback() {
+        guard inlinePlayable else { return }
         if isCurrent {
-            if looping == nil { looping = LoopingPlayer(url: clip.video) }
+            if looping == nil { looping = LoopingPlayer(url: clip.video, preview: clip.link != nil) }
             looping?.player.isMuted = muted
+            looping?.wantsPlay = !paused
             if paused { looping?.player.pause() } else { looping?.player.play() }
         } else {
+            looping?.wantsPlay = false
             looping?.player.pause()
+        }
+    }
+
+    private func playFull() {
+        guard let link = clip.link else { return }
+        paused = true
+        if clip.hasDetail {
+            Playback.playLink(link, as: clip.item, episodeId: clip.episodeId, episodeLabel: clip.episodeLabel, library: library)
+        } else {
+            Playback.playLink(link, app: app, library: library)
         }
     }
 
@@ -173,6 +240,15 @@ struct ClipPage: View {
 
             HStack(alignment: .bottom, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
+                    if clip.link != nil {
+                        Button { playFull() } label: {
+                            Label(clip.episodeLabel.map { "Riproduci \($0)" } ?? "Riproduci", systemImage: "play.fill")
+                                .font(.subheadline.weight(.bold))
+                                .padding(.horizontal, 18).padding(.vertical, 10)
+                        }
+                        .buttonStyle(GlassButtonStyle(tint: app.accent))
+                        .padding(.bottom, 4)
+                    }
                     Text(clip.item.title).font(.system(size: 22, weight: .bold))
                     if !clip.item.tagLine.isEmpty {
                         Text(clip.item.tagLine).font(.system(size: 12, weight: .semibold))
@@ -189,11 +265,13 @@ struct ClipPage: View {
                         withAnimation { library.toggle(clip.item) }
                     }
                     ShareLink(item: clip.item.title) { circleLabel("paperplane") }
-                    Button { app.detailItem = clip.item } label: {
-                        ImageTile(url: clip.item.bestPosterImage, width: 58, height: 58, corner: 29)
-                            .overlay(Circle().stroke(.white.opacity(0.8), lineWidth: 1.5))
+                    if clip.hasDetail {
+                        Button { paused = true; app.detailItem = clip.item } label: {
+                            ImageTile(url: clip.item.bestPosterImage, width: 58, height: 58, corner: 29)
+                                .overlay(Circle().stroke(.white.opacity(0.8), lineWidth: 1.5))
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 16)
@@ -249,5 +327,49 @@ struct PlayerLayerView: UIViewRepresentable {
     final class PlayerUIView: UIView {
         override class var layerClass: AnyClass { AVPlayerLayer.self }
         var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+    }
+}
+
+
+/// Feed delle clip costruito dai contenuti della playlist M3U: film ed episodi abbinati al catalogo,
+/// ordinati in base ai gusti (con un po' di casualità), oppure le voci on demand delle playlist caricate.
+@MainActor
+enum ClipFeed {
+    static var hasLinkContent: Bool {
+        !LinkLibrary.shared.matchedItems.isEmpty || !PlaylistStore.shared.playlists.isEmpty
+    }
+
+    static func build(taste: TasteProfile, limit: Int = 80) -> [Clip] {
+        let lib = LinkLibrary.shared
+        var out: [(Clip, Double)] = []
+        func score(_ item: MediaItem) -> Double {
+            Double(taste.compatibility(item) ?? 60) + Double.random(in: 0...35)
+        }
+        // Campione casuale per non lavorare su decine di migliaia di titoli.
+        for item in lib.matchedMovies.shuffled().prefix(600) {
+            if let m = lib.link(forItem: item.id) { out.append((Clip(item: item, link: m), score(item))) }
+        }
+        for item in lib.matchedSeries.shuffled().prefix(300) {
+            guard let eps = lib.episodeLinks[item.id], !eps.isEmpty else { continue }
+            // Primo episodio disponibile (stagione ed episodio più bassi)
+            let parsed = eps.keys.compactMap { k -> (Int, Int, String)? in
+                let nums = k.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+                return nums.count == 2 ? (nums[0], nums[1], k) : nil
+            }.sorted { ($0.0, $0.1) < ($1.0, $1.1) }
+            guard let first = parsed.first, let m = eps[first.2] else { continue }
+            let clip = Clip(item: item, link: m, episodeId: "\(item.id)-s\(first.0)e\(first.1)",
+                            episodeLabel: "S\(first.0) E\(first.1)")
+            out.append((clip, score(item)))
+        }
+        if out.isEmpty {
+            let store = PlaylistStore.shared
+            for p in store.playlists {
+                for m in store.media(of: p).filter({ !$0.isLive }).shuffled().prefix(200) {
+                    out.append((Clip(item: m.asItem, link: m), Double.random(in: 0...100)))
+                }
+                if out.count >= 400 { break }
+            }
+        }
+        return out.sorted { $0.1 > $1.1 }.prefix(limit).map(\.0)
     }
 }

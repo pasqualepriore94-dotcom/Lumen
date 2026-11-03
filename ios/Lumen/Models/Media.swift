@@ -318,8 +318,24 @@ struct Clip: Decodable, Identifiable, Hashable {
     var id: String
     var item: MediaItem
     var video: URL
+    /// Clip ricavata da un contenuto della playlist (film o episodio abbinato al catalogo).
+    var link: LinkMedia? = nil
+    var episodeId: String? = nil
+    var episodeLabel: String? = nil
 
     enum CodingKeys: String, CodingKey { case id, item, video }
+
+    init(item: MediaItem, link: LinkMedia, episodeId: String? = nil, episodeLabel: String? = nil) {
+        self.id = "link|" + item.id + "|" + link.id
+        self.item = item
+        self.video = link.url
+        self.link = link
+        self.episodeId = episodeId
+        self.episodeLabel = episodeLabel
+    }
+
+    /// true se è un contenuto collegato a una scheda del catalogo
+    var hasDetail: Bool { !item.id.hasPrefix("link-") }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
