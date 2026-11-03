@@ -22,8 +22,9 @@ struct HomeView: View {
                     chips(proxy: proxy).id("top")
 
                     if let feed {
-                        if let hero = heroItem(feed) {
-                            HeroCard(item: hero)
+                        let heroes = heroItems(feed)
+                        if !heroes.isEmpty {
+                            HeroCarousel(items: heroes)
                         }
                         if activeFilter == nil && !library.continueWatching.isEmpty {
                             ContinueWatchingRow(entries: library.continueWatching)
@@ -136,6 +137,22 @@ struct HomeView: View {
         }
     }
 
+    /// Titoli in evidenza da scorrere: il principale più i primi di ogni categoria, senza doppioni.
+    private func heroItems(_ feed: HomeFeed) -> [MediaItem] {
+        var out: [MediaItem] = []
+        var seen = Set<String>()
+        func add(_ i: MediaItem?) {
+            guard let i, matches(i), i.bestPosterImage != nil, seen.insert(i.id).inserted else { return }
+            out.append(i)
+        }
+        add(heroItem(feed))
+        let sections = filteredSections(feed)
+        for depth in 0..<3 {
+            for s in sections where s.items.count > depth { add(s.items[depth]); if out.count >= 8 { return out } }
+        }
+        return out
+    }
+
     private func heroItem(_ feed: HomeFeed) -> MediaItem? {
         if activeFilter == nil { return feed.hero ?? feed.allItems.first }
         return feed.allItems.first(where: matches)
@@ -164,6 +181,49 @@ private extension View {
 }
 
 // MARK: - Hero
+
+/// Contenuti in evidenza a scorrimento orizzontale, con avanzamento automatico.
+struct HeroCarousel: View {
+    @Environment(AppState.self) private var app
+    let items: [MediaItem]
+    @State private var index = 0
+    @State private var lastInteraction = Date()
+
+    private var cardHeight: CGFloat { (UIScreen.main.bounds.width - 32) / 0.7 }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            TabView(selection: $index) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
+                    HeroCard(item: item).tag(i)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .frame(height: cardHeight + 30)
+            .onChange(of: index) { lastInteraction = Date() }
+
+            if items.count > 1 {
+                HStack(spacing: 6) {
+                    ForEach(items.indices, id: \.self) { i in
+                        Capsule()
+                            .fill(i == index ? app.accent : .white.opacity(0.35))
+                            .frame(width: i == index ? 18 : 6, height: 6)
+                    }
+                }
+                .animation(.snappy, value: index)
+            }
+        }
+        .onChange(of: items.map(\.id)) { index = 0 }
+        .task(id: items.count) {
+            // Passa da solo al successivo ogni 7 secondi (si ferma se l'utente sta scorrendo).
+            while !Task.isCancelled, items.count > 1 {
+                try? await Task.sleep(for: .seconds(7))
+                guard Date().timeIntervalSince(lastInteraction) > 6 else { continue }
+                withAnimation(.easeInOut(duration: 0.6)) { index = (index + 1) % items.count }
+            }
+        }
+    }
+}
 
 struct HeroCard: View {
     @Environment(AppState.self) private var app

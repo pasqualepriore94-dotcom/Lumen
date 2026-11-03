@@ -168,18 +168,21 @@ struct ClipPage: View {
     private var sheetOpen: Bool { app.detailItem != nil }
 
     var body: some View {
-        ZStack {
-            Color.black
-            background
-            LinearGradient(stops: [.init(color: .black.opacity(0.55), location: 0), .init(color: .clear, location: 0.25),
-                                   .init(color: .clear, location: 0.45), .init(color: .black.opacity(0.92), location: 0.85)],
-                           startPoint: .top, endPoint: .bottom)
-                .allowsHitTesting(false)
-            overlay
+        GeometryReader { geo in
+            ZStack {
+                Color.black
+                background
+                    .frame(width: geo.size.width, height: geo.size.height)
+                LinearGradient(stops: [.init(color: .black.opacity(0.55), location: 0), .init(color: .clear, location: 0.25),
+                                       .init(color: .clear, location: 0.45), .init(color: .black.opacity(0.92), location: 0.85)],
+                               startPoint: .top, endPoint: .bottom)
+                    .allowsHitTesting(false)
+                overlay
+                    .frame(width: geo.size.width, height: geo.size.height)
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
         }
-        .clipped()
-        .contentShape(Rectangle())
-        .onTapGesture { paused.toggle() }
         .onAppear(perform: syncPlayback)
         .onChange(of: isCurrent) { syncPlayback() }
         .onChange(of: paused) { syncPlayback() }
@@ -199,8 +202,11 @@ struct ClipPage: View {
     @ViewBuilder
     private var background: some View {
         ZStack {
-            RemoteImage(url: item.bestPosterImage ?? item.bestWideImage)
+            Color.clear
+                .overlay(RemoteImage(url: item.bestPosterImage ?? item.bestWideImage))
+                .clipped()
                 .blur(radius: trailerId != nil ? 30 : 0)
+                .allowsHitTesting(false)
                 .scaleEffect(isCurrent && looping == nil && trailerId == nil ? 1.12 : 1)
                 .animation(.easeInOut(duration: 12).repeatForever(autoreverses: true), value: isCurrent)
                 .overlay(Color.black.opacity(trailerId != nil ? 0.35 : 0))
@@ -208,7 +214,7 @@ struct ClipPage: View {
                 VStack {
                     Spacer().frame(height: 110)
                     ZStack {
-                        RemoteImage(url: item.bestWideImage)
+                        Color.clear.overlay(RemoteImage(url: item.bestWideImage)).clipped()
                         if isCurrent {
                             TrailerPreview(videoId: trailerId, muted: muted, paused: paused || sheetOpen,
                                            controls: false, playing: $trailerPlaying)
@@ -220,14 +226,24 @@ struct ClipPage: View {
                     .aspectRatio(16.0 / 9.0, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 0.6))
+                    .overlay {
+                        if paused {
+                            Image(systemName: "play.fill").font(.system(size: 44)).foregroundStyle(.white.opacity(0.9))
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { paused.toggle() }
                     .shadow(color: .black.opacity(0.5), radius: 20, y: 10)
                     .padding(.horizontal, 12)
                     Spacer()
                 }
             } else if let looping {
+                // Estratto del video: si mette in pausa toccando il video (non i testi o i pulsanti).
                 PlayerLayerView(player: looping.player)
+                    .contentShape(Rectangle())
+                    .onTapGesture { paused.toggle() }
             }
-            if paused {
+            if paused && trailerId == nil && looping != nil {
                 Image(systemName: "play.fill")
                     .font(.system(size: 54))
                     .foregroundStyle(.white.opacity(0.85))
@@ -300,9 +316,11 @@ struct ClipPage: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(item.title)
-                    .font(.system(size: 30, weight: .heavy))
+                    .font(.system(size: 28, weight: .heavy))
                     .lineLimit(2)
-                    .minimumScaleFactor(0.7)
+                    .minimumScaleFactor(0.6)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .shadow(color: .black.opacity(0.6), radius: 8)
                 HStack(spacing: 8) {
                     if let match = library.taste.compatibility(item, genres: info?.genres) {
@@ -317,11 +335,16 @@ struct ClipPage: View {
                 }
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white.opacity(0.85))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
                 if !item.tagLine.isEmpty {
                     Text(item.tagLine).font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.7))
+                        .lineLimit(1)
                 }
                 if let overview = item.overview, !overview.isEmpty, clip.hasDetail {
                     Text(overview).font(.system(size: 14)).lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .foregroundStyle(.white.opacity(0.85))
                 }
 
