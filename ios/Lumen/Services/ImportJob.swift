@@ -150,18 +150,50 @@ final class ImportJob {
         }
     }
 
+    /// Scarica la playlist intera (anche molto grande) e la tratta esattamente come un file .m3u caricato.
+    private func downloadPlaylist(_ url: URL) async -> (SavedPlaylist, [LinkMedia])? {
+        let ext = url.pathExtension.lowercased()
+        // Un singolo video non è una playlist.
+        guard !["mp4", "m4v", "mov", "mkv", "avi", "webm"].contains(ext) else { return nil }
+        var request = URLRequest(url: url, timeoutInterval: 180)
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Lumen", forHTTPHeaderField: "User-Agent")
+        guard let pair = try? await URLSession.shared.download(for: request),
+              let http = pair.1 as? HTTPURLResponse, (200..<400).contains(http.statusCode) else { return nil }
+        let file = pair.0
+        let type = (http.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased()
+        if type.hasPrefix("video/") { return nil }
+        let parsed: (String, [LinkMedia])? = await Task.detached(priority: .userInitiated) {
+            defer { try? FileManager.default.removeItem(at: file) }
+            guard let data = try? Data(contentsOf: file), let text = PlaylistStore.decode(data) else { return nil }
+            let head = text.prefix(4000)
+            // Flusso HLS singolo (varianti o segmenti): non è un elenco di contenuti.
+            guard head.contains("#EXTINF") || head.hasPrefix("#EXTM3U") || text.hasPrefix("\u{FEFF}#EXTM3U"),
+                  !head.contains("#EXT-X-STREAM-INF"), !head.contains("#EXT-X-TARGETDURATION") else { return nil }
+            return (text, PlaylistStore.parse(text, origin: (http.url ?? url).absoluteString))
+        }.value
+        guard let parsed, !parsed.1.isEmpty else { return nil }
+        let text = parsed.0, list = parsed.1
+        let name = url.host ?? (url.deletingPathExtension().lastPathComponent)
+        let (saved, _) = PlaylistStore.shared.save(name: name, origin: url.absoluteString, text: text)
+        return (saved, list)
+    }
+
     private func download(_ text: String) async {
+        // 1) Playlist M3U da link: stessa analisi dei file caricati (intera, salvata in "Playlist M3U").
+        if let url = LinkResolver.normalize(text), let found = await downloadPlaylist(url) {
+            let saved = found.0, list = found.1
+            input = list
+            sourceName = saved.name
+            message = "Playlist da link: \(saved.entries) voci (\(saved.vods) on demand, \(saved.lives) dirette). Salvata in Playlist M3U."
+            phase = .mapping
+            saveInput()
+            persist(force: true)
+            return
+        }
+        // 2) Altri link: video diretto, flusso HLS, API Lumen o pagina web.
         let result = await LinkResolver.resolve(text)
         switch result {
         case .media(let list):
-            // Le playlist prese da link vengono salvate, così si possono aggiornare o eliminare.
-            if list.count > 1, list.allSatisfy({ $0.source == "Playlist" }), let url = LinkResolver.normalize(text) {
-                var request = URLRequest(url: url, timeoutInterval: 30)
-                request.setValue("Lumen", forHTTPHeaderField: "User-Agent")
-                if let pair = try? await URLSession.shared.data(for: request), let body = PlaylistStore.decode(pair.0) {
-                    PlaylistStore.shared.save(name: url.host ?? "Playlist", origin: url.absoluteString, text: body)
-                }
-            }
             input = list
             phase = .mapping
             saveInput()

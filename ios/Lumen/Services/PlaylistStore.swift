@@ -42,7 +42,7 @@ final class PlaylistStore {
     private static func textFile(_ id: UUID) -> URL { folder.appendingPathComponent("\(id.uuidString).m3u") }
 
     /// Decodifica il contenuto di un file M3U (UTF-8, con ripiego su Latin-1).
-    static func decode(_ data: Data) -> String? {
+    nonisolated static func decode(_ data: Data) -> String? {
         if let s = String(data: data, encoding: .utf8) { return s }
         return String(data: data, encoding: .isoLatin1)
     }
@@ -92,7 +92,7 @@ final class PlaylistStore {
         return save(name: p.name, origin: p.origin, text: text)
     }
 
-    static func parse(_ text: String, origin: String) -> [LinkMedia] {
+    nonisolated static func parse(_ text: String, origin: String) -> [LinkMedia] {
         let base = URL(string: origin).flatMap { $0.host != nil ? $0 : nil } ?? URL(string: "https://localhost/")!
         if case .media(let list) = LinkResolver.parsePlaylist(text, base: base) {
             return list.map { var m = $0; m.source = origin.hasPrefix("http") ? "Playlist" : "File M3U"; return m }
