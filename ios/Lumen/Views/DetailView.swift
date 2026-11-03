@@ -135,37 +135,21 @@ struct DetailView: View {
         Color.clear
             .aspectRatio(16.0 / 9.0, contentMode: .fit)
             .overlay(RemoteImage(url: current.bestWideImage))
-            .overlay {
-                // Il trailer parte da solo in anteprima, senza audio.
-                if let id = previewId {
-                    TrailerPreview(videoId: id, muted: previewMuted, paused: previewPaused || trailer != nil,
-                                   playing: $previewPlaying)
-                        .opacity(previewPlaying ? 1 : 0)
-                        .animation(.easeInOut(duration: 0.6), value: previewPlaying)
-                        .allowsHitTesting(false)
-                }
-            }
             .overlay(LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .center, endPoint: .bottom)
                 .allowsHitTesting(false))
-            .overlay(alignment: .bottomTrailing) {
-                if previewPlaying {
-                    HStack(spacing: 8) {
-                        Text("Trailer").font(.caption2.weight(.bold))
-                            .padding(.horizontal, 8).padding(.vertical, 4)
-                            .liquidGlassCapsule()
-                        Button { previewMuted.toggle() } label: {
-                            Image(systemName: previewMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                                .font(.system(size: 13, weight: .semibold)).frame(width: 34, height: 34)
-                        }
-                        .buttonStyle(GlassButtonStyle(shape: AnyShape(Circle())))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(12)
-                    .transition(.opacity)
+            .overlay {
+                // Il trailer parte da solo in anteprima, con i controlli di YouTube.
+                if let id = previewId {
+                    TrailerPreview(videoId: id, muted: previewMuted, paused: previewPaused || trailer != nil,
+                                   controls: true, playing: $previewPlaying)
+                        .opacity(previewPlaying ? 1 : 0)
+                        .animation(.easeInOut(duration: 0.5), value: previewPlaying)
+                        .allowsHitTesting(previewPlaying)
                 }
             }
             .overlay {
-                if canStream || movieLink != nil || firstLinkedEpisode != nil || detail?.trailer != nil {
+                // Con l'anteprima del trailer restano solo i controlli di YouTube.
+                if previewId == nil && (canStream || movieLink != nil || firstLinkedEpisode != nil || detail?.trailer != nil) {
                     Button { primaryAction() } label: {
                         Image(systemName: "play.fill")
                             .font(.system(size: 24))

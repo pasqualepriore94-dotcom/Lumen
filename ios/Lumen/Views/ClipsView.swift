@@ -160,35 +160,33 @@ struct ClipPage: View {
 
     @State private var looping: LoopingPlayer?
     @State private var paused = false
+    @State private var trailerId: String?
+    @State private var trailerPlaying = false
+    @State private var info: MediaDetail?
+
+    private var item: MediaItem { info?.item ?? clip.item }
+    private var sheetOpen: Bool { app.detailItem != nil }
 
     var body: some View {
         ZStack {
             Color.black
-            if let looping {
-                RemoteImage(url: clip.item.bestWideImage)
-                PlayerLayerView(player: looping.player)
-                    .onTapGesture { paused.toggle() }
-            } else {
-                RemoteImage(url: clip.item.bestWideImage)
-                    .scaleEffect(isCurrent ? 1.12 : 1)
-                    .animation(.easeInOut(duration: 12).repeatForever(autoreverses: true), value: isCurrent)
-            }
-            if paused {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 54))
-                    .foregroundStyle(.white.opacity(0.85))
-                    .allowsHitTesting(false)
-            }
-            LinearGradient(stops: [.init(color: .clear, location: 0.5), .init(color: .black.opacity(0.8), location: 1)],
+            background
+            LinearGradient(stops: [.init(color: .black.opacity(0.55), location: 0), .init(color: .clear, location: 0.25),
+                                   .init(color: .clear, location: 0.45), .init(color: .black.opacity(0.92), location: 0.85)],
                            startPoint: .top, endPoint: .bottom)
                 .allowsHitTesting(false)
             overlay
         }
         .clipped()
+        .contentShape(Rectangle())
+        .onTapGesture { paused.toggle() }
         .onAppear(perform: syncPlayback)
         .onChange(of: isCurrent) { syncPlayback() }
         .onChange(of: paused) { syncPlayback() }
+        .onChange(of: trailerId) { syncPlayback() }
         .onChange(of: muted) { looping?.player.isMuted = muted }
+        .onChange(of: sheetOpen) { syncPlayback() }
+        .task(id: isCurrent) { if isCurrent { await loadTrailer() } }
         .onDisappear {
             looping?.tearDown()
             looping = nil
@@ -196,12 +194,74 @@ struct ClipPage: View {
         }
     }
 
+    // MARK: Sfondo: trailer, estratto del video o immagine
+
+    @ViewBuilder
+    private var background: some View {
+        ZStack {
+            RemoteImage(url: item.bestPosterImage ?? item.bestWideImage)
+                .blur(radius: trailerId != nil ? 30 : 0)
+                .scaleEffect(isCurrent && looping == nil && trailerId == nil ? 1.12 : 1)
+                .animation(.easeInOut(duration: 12).repeatForever(autoreverses: true), value: isCurrent)
+                .overlay(Color.black.opacity(trailerId != nil ? 0.35 : 0))
+            if let trailerId {
+                VStack {
+                    Spacer().frame(height: 110)
+                    ZStack {
+                        RemoteImage(url: item.bestWideImage)
+                        if isCurrent {
+                            TrailerPreview(videoId: trailerId, muted: muted, paused: paused || sheetOpen,
+                                           controls: false, playing: $trailerPlaying)
+                                .opacity(trailerPlaying ? 1 : 0)
+                                .animation(.easeInOut(duration: 0.5), value: trailerPlaying)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 0.6))
+                    .shadow(color: .black.opacity(0.5), radius: 20, y: 10)
+                    .padding(.horizontal, 12)
+                    Spacer()
+                }
+            } else if let looping {
+                PlayerLayerView(player: looping.player)
+            }
+            if paused {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 54))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    /// Trailer dalla scheda del catalogo (se il titolo è abbinato e il trailer esiste).
+    private func loadTrailer() async {
+        guard clip.hasDetail, trailerId == nil else { return }
+        if let cached = ClipFeed.trailerCache[clip.item.id] {
+            trailerId = cached
+            return
+        }
+        guard let d = try? await app.provider.detail(id: clip.item.id) else { return }
+        info = d
+        let id = d.trailer.flatMap { TrailerPlayerView.videoId(from: $0) }
+        ClipFeed.trailerCache[clip.item.id] = id
+        trailerId = id
+    }
+
     /// I formati che iOS non riproduce in linea (MKV, AVI…) mostrano l'immagine e il pulsante Riproduci.
     private var inlinePlayable: Bool { !VLCPlayerViewController.needsVLC(clip.video) }
 
     private func syncPlayback() {
+        // Con il trailer disponibile non serve l'estratto del video.
+        if trailerId != nil {
+            looping?.tearDown()
+            looping = nil
+            return
+        }
         guard inlinePlayable else { return }
-        if isCurrent {
+        if isCurrent && !sheetOpen {
             if looping == nil { looping = LoopingPlayer(url: clip.video, preview: clip.link != nil) }
             looping?.player.isMuted = muted
             looping?.wantsPlay = !paused
@@ -213,86 +273,88 @@ struct ClipPage: View {
     }
 
     private func playFull() {
-        guard let link = clip.link else { return }
         paused = true
-        if clip.hasDetail {
-            Playback.playLink(link, as: clip.item, episodeId: clip.episodeId, episodeLabel: clip.episodeLabel, library: library)
+        if let link = clip.link {
+            if clip.hasDetail {
+                Playback.playLink(link, as: clip.item, episodeId: clip.episodeId, episodeLabel: clip.episodeLabel, library: library)
+            } else {
+                Playback.playLink(link, app: app, library: library)
+            }
         } else {
-            Playback.playLink(link, app: app, library: library)
+            app.detailItem = clip.item
         }
     }
+
+    // MARK: Informazioni e azioni
 
     private var overlay: some View {
         VStack(spacing: 0) {
             HStack {
                 Spacer()
-                if let rating = clip.item.rating {
-                    Text(rating)
-                        .font(.system(size: 11, weight: .semibold))
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .liquidGlassCapsule()
-                }
+                circleButton(muted ? "speaker.slash.fill" : "speaker.wave.2.fill") { muted.toggle() }
             }
-            .padding(.top, 60)
+            .padding(.top, 56)
             .padding(.horizontal, 16)
 
             Spacer()
 
-            HStack(alignment: .bottom, spacing: 16) {
-                VStack(alignment: .leading, spacing: 6) {
-                    if clip.link != nil {
-                        Button { playFull() } label: {
-                            Label(clip.episodeLabel.map { "Riproduci \($0)" } ?? "Riproduci", systemImage: "play.fill")
-                                .font(.subheadline.weight(.bold))
-                                .padding(.horizontal, 18).padding(.vertical, 10)
-                        }
-                        .buttonStyle(GlassButtonStyle(tint: app.accent))
-                        .padding(.bottom, 4)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(item.title)
+                    .font(.system(size: 30, weight: .heavy))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.7)
+                    .shadow(color: .black.opacity(0.6), radius: 8)
+                HStack(spacing: 8) {
+                    if let match = library.taste.compatibility(item, genres: info?.genres) {
+                        MatchBadge(percent: match, compact: true)
                     }
-                    Text(clip.item.title).font(.system(size: 22, weight: .bold))
-                    if !clip.item.tagLine.isEmpty {
-                        Text(clip.item.tagLine).font(.system(size: 12, weight: .semibold))
+                    if let year = item.year { Text(String(year)) }
+                    Text(item.isSeries ? "Serie TV" : "Film")
+                    if let score = item.scoreLabel {
+                        Label(score, systemImage: "star.fill").labelStyle(.titleAndIcon)
                     }
-                    if let overview = clip.item.overview {
-                        Text(overview).font(.system(size: 14)).lineLimit(4)
-                            .foregroundStyle(.white.opacity(0.9))
-                    }
+                    if let ep = clip.episodeLabel { Text(ep) }
                 }
-                Spacer(minLength: 0)
-                VStack(spacing: 18) {
-                    circleButton(muted ? "speaker.slash.fill" : "speaker.wave.2.fill") { muted.toggle() }
-                    circleButton(library.contains(clip.item) ? "checkmark" : "plus") {
-                        withAnimation { library.toggle(clip.item) }
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.85))
+                if !item.tagLine.isEmpty {
+                    Text(item.tagLine).font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.7))
+                }
+                if let overview = item.overview, !overview.isEmpty, clip.hasDetail {
+                    Text(overview).font(.system(size: 14)).lineLimit(3)
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+
+                HStack(spacing: 10) {
+                    Button { playFull() } label: {
+                        Label(clip.link == nil ? "Dettagli" : "Riproduci", systemImage: "play.fill")
+                            .font(.system(size: 16, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
                     }
-                    ShareLink(item: clip.item.title) { circleLabel("paperplane") }
+                    .buttonStyle(GlassButtonStyle(tint: app.accent))
+
+                    Button { withAnimation { library.toggle(clip.item) } } label: {
+                        Label(library.contains(clip.item) ? "In lista" : "La mia lista",
+                              systemImage: library.contains(clip.item) ? "checkmark" : "plus")
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                    }
+                    .buttonStyle(GlassButtonStyle())
+
                     if clip.hasDetail {
                         Button { paused = true; app.detailItem = clip.item } label: {
-                            ImageTile(url: clip.item.bestPosterImage, width: 58, height: 58, corner: 29)
-                                .overlay(Circle().stroke(.white.opacity(0.8), lineWidth: 1.5))
+                            Image(systemName: "info.circle").font(.system(size: 18, weight: .semibold))
+                                .frame(width: 48, height: 48)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(GlassButtonStyle(shape: AnyShape(Circle())))
                     }
                 }
+                .padding(.top, 6)
             }
             .padding(.horizontal, 16)
-
-            HStack(spacing: 10) {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(.white.opacity(0.3))
-                        Capsule().fill(.white).frame(width: geo.size.width * (looping?.progress ?? 0))
-                        Circle().fill(.white).frame(width: 8, height: 8)
-                            .offset(x: geo.size.width * (looping?.progress ?? 0) - 4)
-                    }
-                }
-                .frame(height: 3)
-                Text(formatTime(looping?.remaining ?? 0))
-                    .font(.system(size: 11).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.75))
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, Theme.tabBarHeight + 10)
+            .padding(.bottom, Theme.tabBarHeight + 16)
         }
         .foregroundStyle(.white)
     }
@@ -303,9 +365,9 @@ struct ClipPage: View {
 
     private func circleLabel(_ icon: String) -> some View {
         Image(systemName: icon)
-            .font(.system(size: 18, weight: .semibold))
+            .font(.system(size: 16, weight: .semibold))
             .foregroundStyle(.white)
-            .frame(width: 48, height: 48)
+            .frame(width: 42, height: 42)
             .liquidGlass(in: Circle(), interactive: true)
     }
 }
@@ -335,6 +397,8 @@ struct PlayerLayerView: UIViewRepresentable {
 /// ordinati in base ai gusti (con un po' di casualità), oppure le voci on demand delle playlist caricate.
 @MainActor
 enum ClipFeed {
+    /// id titolo → id YouTube del trailer (nil = nessun trailer)
+    static var trailerCache: [String: String?] = [:]
     static var hasLinkContent: Bool {
         !LinkLibrary.shared.matchedItems.isEmpty || !PlaylistStore.shared.playlists.isEmpty
     }

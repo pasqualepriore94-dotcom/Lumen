@@ -120,11 +120,14 @@ struct TrailerPreview: UIViewRepresentable {
     let videoId: String
     var muted: Bool
     var paused: Bool
+    /// true: controlli di YouTube visibili e toccabili (scheda del titolo). false: solo video (clip).
+    var controls: Bool = false
     @Binding var playing: Bool
 
-    func makeCoordinator() -> Coordinator { Coordinator(playing: $playing) }
+    func makeCoordinator() -> Coordinator { Coordinator(playing: $playing, controls: controls) }
 
     func makeUIView(context: Context) -> WKWebView {
+        context.coordinator.lastMuted = muted
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
@@ -135,25 +138,27 @@ struct TrailerPreview: UIViewRepresentable {
         web.backgroundColor = .clear
         web.scrollView.backgroundColor = .clear
         web.scrollView.isScrollEnabled = false
-        web.isUserInteractionEnabled = false
+        web.isUserInteractionEnabled = controls
+        web.navigationDelegate = context.coordinator
         let origin = "https://pasqualepriore94-dotcom.github.io"
         let html = """
         <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
         <meta name="referrer" content="strict-origin-when-cross-origin">
         <style>
         html,body{margin:0;height:100%;background:transparent;overflow:hidden}
-        #p{position:fixed;left:50%;top:50%;width:100%;height:100%;transform:translate(-50%,-50%) scale(1.35);pointer-events:none}
+        #p{position:fixed;left:50%;top:50%;width:100%;height:100%;transform:translate(-50%,-50%) scale(\(controls ? "1" : "1.35"));pointer-events:\(controls ? "auto" : "none")}
         </style></head><body><div id="p"></div>
         <script>
-        var player, wantMuted = true, wantPaused = false;
+        var player, wantMuted = \(muted), wantPaused = false;
         function post(v){ try{ window.webkit.messageHandlers.yt.postMessage(v) }catch(e){} }
         function onYouTubeIframeAPIReady(){
           player = new YT.Player('p', {
             host: 'https://www.youtube-nocookie.com', videoId: '\(videoId)',
-            playerVars: { autoplay: 1, mute: 1, playsinline: 1, controls: 0, rel: 0, modestbranding: 1,
-                          loop: 1, playlist: '\(videoId)', iv_load_policy: 3, fs: 0, disablekb: 1, origin: '\(origin)' },
+            playerVars: { autoplay: 1, mute: 1, playsinline: 1, controls: \(controls ? 1 : 0), rel: 0, modestbranding: 1,
+                          loop: 1, playlist: '\(videoId)', iv_load_policy: 3, fs: \(controls ? 1 : 0), disablekb: \(controls ? 0 : 1), origin: '\(origin)' },
             events: {
-              onReady: function(e){ e.target.mute(); if(!wantPaused){ e.target.playVideo() } },
+              onReady: function(e){ post(100); if(wantMuted){ e.target.mute() } else { e.target.unMute(); e.target.setVolume(100) }
+                                    if(!wantPaused){ e.target.playVideo() } },
               onStateChange: function(e){ post(e.data) },
               onError: function(e){ post(-2) }
             }
@@ -182,18 +187,31 @@ struct TrailerPreview: UIViewRepresentable {
         web.loadHTMLString("", baseURL: nil)
     }
 
-    final class Coordinator: NSObject, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         var playing: Binding<Bool>
+        let controls: Bool
         weak var web: WKWebView?
         var lastMuted = true
         var lastPaused = false
-        init(playing: Binding<Bool>) { self.playing = playing }
+        init(playing: Binding<Bool>, controls: Bool) { self.playing = playing; self.controls = controls }
+
+        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                     decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
+            // Logo YouTube / "Guarda su YouTube": fuori dall'app.
+            if navigationAction.navigationType == .linkActivated, let url = navigationAction.request.url {
+                UIApplication.shared.open(url)
+                decisionHandler(.cancel)
+                return
+            }
+            decisionHandler(.allow)
+        }
 
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let state = message.body as? Int else { return }
             // 1 = in riproduzione; -2 = errore (video non incorporabile): resta l'immagine.
             DispatchQueue.main.async {
-                if state == 1 { self.playing.wrappedValue = true }
+                // Con i controlli il player si mostra appena pronto (se l'avvio automatico non riesce, si tocca play).
+                if state == 1 || (self.controls && state == 100) { self.playing.wrappedValue = true }
                 if state == -2 { self.playing.wrappedValue = false }
             }
         }
