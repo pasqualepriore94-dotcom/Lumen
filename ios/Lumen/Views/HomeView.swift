@@ -188,6 +188,7 @@ struct HeroCarousel: View {
     let items: [MediaItem]
     @State private var index = 0
     @State private var lastInteraction = Date()
+    @State private var autoAdvancing = false
 
     private var cardHeight: CGFloat { (UIScreen.main.bounds.width - 32) / 0.7 }
 
@@ -200,7 +201,10 @@ struct HeroCarousel: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .frame(height: cardHeight + 30)
-            .simultaneousGesture(DragGesture(minimumDistance: 10).onChanged { _ in lastInteraction = Date() })
+            // Nessun gesto aggiuntivo sullo slider: lo scorrimento verticale della home resta libero.
+            .onChange(of: index) {
+                if autoAdvancing { autoAdvancing = false } else { lastInteraction = Date() }
+            }
 
             if items.count > 1 {
                 HStack(spacing: 6) {
@@ -217,6 +221,7 @@ struct HeroCarousel: View {
         // Scorre da solo ogni 5 secondi; dopo uno slide manuale aspetta qualche secondo in più.
         .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
             guard items.count > 1, Date().timeIntervalSince(lastInteraction) > 4.5 else { return }
+            autoAdvancing = true
             withAnimation(.easeInOut(duration: 0.7)) { index = (index + 1) % items.count }
         }
     }
