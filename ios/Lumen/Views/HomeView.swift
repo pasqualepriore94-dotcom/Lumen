@@ -200,7 +200,7 @@ struct HeroCarousel: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .frame(height: cardHeight + 30)
-            .onChange(of: index) { lastInteraction = Date() }
+            .simultaneousGesture(DragGesture(minimumDistance: 10).onChanged { _ in lastInteraction = Date() })
 
             if items.count > 1 {
                 HStack(spacing: 6) {
@@ -214,13 +214,10 @@ struct HeroCarousel: View {
             }
         }
         .onChange(of: items.map(\.id)) { index = 0 }
-        .task(id: items.count) {
-            // Passa da solo al successivo ogni 7 secondi (si ferma se l'utente sta scorrendo).
-            while !Task.isCancelled, items.count > 1 {
-                try? await Task.sleep(for: .seconds(7))
-                guard Date().timeIntervalSince(lastInteraction) > 6 else { continue }
-                withAnimation(.easeInOut(duration: 0.6)) { index = (index + 1) % items.count }
-            }
+        // Scorre da solo ogni 5 secondi; dopo uno slide manuale aspetta qualche secondo in più.
+        .onReceive(Timer.publish(every: 5, on: .main, in: .common).autoconnect()) { _ in
+            guard items.count > 1, Date().timeIntervalSince(lastInteraction) > 4.5 else { return }
+            withAnimation(.easeInOut(duration: 0.7)) { index = (index + 1) % items.count }
         }
     }
 }

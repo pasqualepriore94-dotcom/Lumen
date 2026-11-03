@@ -146,14 +146,14 @@ struct TrailerPreview: UIViewRepresentable {
         <meta name="referrer" content="strict-origin-when-cross-origin">
         <style>
         html,body{margin:0;height:100%;background:transparent;overflow:hidden}
-        #p{position:fixed;left:50%;top:50%;width:100%;height:100%;transform:translate(-50%,-50%) scale(\(controls ? "1" : "1.35"));pointer-events:\(controls ? "auto" : "none")}
+        #p{position:fixed;left:50%;top:50%;width:100%;height:100%;transform:translate(-50%,-50%);pointer-events:\(controls ? "auto" : "none")}
         </style></head><body><div id="p"></div>
         <script>
         var player, wantMuted = \(muted), wantPaused = false;
         function post(v){ try{ window.webkit.messageHandlers.yt.postMessage(v) }catch(e){} }
         function onYouTubeIframeAPIReady(){
           player = new YT.Player('p', {
-            host: 'https://www.youtube-nocookie.com', videoId: '\(videoId)',
+            host: 'https://www.youtube-nocookie.com', videoId: '\(videoId)', width: '100%', height: '100%',
             playerVars: { autoplay: 1, mute: 1, playsinline: 1, controls: \(controls ? 1 : 0), rel: 0, modestbranding: 1,
                           loop: 1, playlist: '\(videoId)', iv_load_policy: 3, fs: \(controls ? 1 : 0), disablekb: \(controls ? 0 : 1), origin: '\(origin)' },
             events: {
