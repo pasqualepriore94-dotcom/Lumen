@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var feed: HomeFeed?
     @State private var errorMessage: String?
     @State private var activeFilter: HomeFilter?
+    @State private var showLive = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -36,9 +37,6 @@ struct HomeView: View {
                                 }
                                 PosterRow(items: library.myList, layout: .poster)
                             }
-                        }
-                        if activeFilter == nil && !LinkLibrary.shared.lives.isEmpty {
-                            LiveChannelsRow(channels: LinkLibrary.shared.lives).id("dirette")
                         }
                         ForEach(filteredSections(feed)) { section in
                             SectionRow(section: section).id(section.id)
@@ -72,6 +70,7 @@ struct HomeView: View {
             .scrollsToTop(.home, proxy: proxy, anchor: "top")
         }
         .task(id: app.contentKey) { await load() }
+        .sheet(isPresented: $showLive) { LiveChannelsView() }
     }
 
     // MARK: Filtri
@@ -101,8 +100,11 @@ struct HomeView: View {
                 Menu {
                     if app.provider.capabilities.browse {
                         Button("Esplora tutto il catalogo", systemImage: "square.grid.3x3") { app.showCatalog = true }
-                        Divider()
                     }
+                    if !LinkLibrary.shared.lives.isEmpty {
+                        Button("Dirette (\(LinkLibrary.shared.lives.count))", systemImage: "dot.radiowaves.left.and.right") { showLive = true }
+                    }
+                    Divider()
                     ForEach(feed?.sections ?? []) { section in
                         Button(section.title) {
                             withAnimation { proxy.scrollTo(section.id, anchor: .top) }

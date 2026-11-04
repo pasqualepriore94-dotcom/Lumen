@@ -6,8 +6,15 @@ import MobileVLCKit
 final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
     static let formats: Set<String> = ["mkv", "avi", "webm", "flv", "wmv", "mpg", "mpeg", "ogv", "divx", "xvid", "3gp", "vob"]
 
+    /// Formati che il player di iOS riproduce da solo; tutto il resto (MKV, flussi .ts delle dirette,
+    /// indirizzi senza estensione…) passa da VLC.
+    static let nativeFormats: Set<String> = ["mp4", "m4v", "mov", "m3u8", "mp3", "m4a", "aac"]
+
     static func needsVLC(_ url: URL) -> Bool {
-        formats.contains(url.pathExtension.lowercased())
+        let ext = url.pathExtension.lowercased()
+        if formats.contains(ext) { return true }
+        if url.absoluteString.lowercased().contains(".m3u8") { return false }
+        return !nativeFormats.contains(ext)
     }
 
     private let url: URL

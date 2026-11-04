@@ -145,7 +145,7 @@ struct LiveChannelsView: View {
                 .padding(.top, 8)
             }
             .scrollIndicators(.hidden)
-            .searchable(text: $search, prompt: "Cerca un canale")
+            .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Cerca una diretta")
             .background(Color.black.ignoresSafeArea())
             .navigationTitle("Dirette")
             .navigationBarTitleDisplayMode(.inline)
