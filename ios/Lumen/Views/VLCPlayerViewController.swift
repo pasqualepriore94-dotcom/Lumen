@@ -287,8 +287,31 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
             }
             sections.append(UIMenu(title: "Sottotitoli", options: .displayInline, children: actions))
         }
-        tracksButton.isHidden = sections.isEmpty
+        // Sincronizzazione audio: con Duplica schermo o casse AirPlay l'audio può arrivare in ritardo.
+        let current = Self.savedAudioDelay
+        let options: [(String, Int)] = [("Anticipa di 2 s", -2000), ("Anticipa di 1,5 s", -1500), ("Anticipa di 1 s", -1000),
+                                        ("Anticipa di 0,5 s", -500), ("Anticipa di 0,25 s", -250), ("Nessuna correzione", 0),
+                                        ("Ritarda di 0,25 s", 250), ("Ritarda di 0,5 s", 500)]
+        let syncActions = options.map { title, ms in
+            UIAction(title: title, state: current == ms ? .on : .off) { [weak self] _ in
+                Self.savedAudioDelay = ms
+                self?.applyAudioDelay()
+                self?.refreshTracksMenu()
+            }
+        }
+        sections.append(UIMenu(title: "Sincronizzazione audio", image: UIImage(systemName: "waveform"), children: syncActions))
+        tracksButton.isHidden = false
         tracksButton.menu = UIMenu(title: "", children: sections)
+    }
+
+    /// Correzione audio scelta dall'utente (millisecondi; negativo = audio anticipato), ricordata per le prossime volte.
+    static var savedAudioDelay: Int {
+        get { UserDefaults.standard.integer(forKey: "lumen.vlc.audioDelay") }
+        set { UserDefaults.standard.set(newValue, forKey: "lumen.vlc.audioDelay") }
+    }
+
+    private func applyAudioDelay() {
+        player.currentAudioPlaybackDelay = Self.savedAudioDelay * 1000   // microsecondi
     }
 
     @objc private func toggleControls() {
@@ -396,6 +419,7 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
         case .playing:
             spinner.stopAnimating()
             updatePlayIcon(playing: true)
+            applyAudioDelay()
             refreshTracksMenu()
             if !didSeekToStart, startAt > 5 {
                 didSeekToStart = true

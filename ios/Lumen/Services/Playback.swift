@@ -216,7 +216,18 @@ final class LumenPlayerViewController: AVPlayerViewController {
         player?.audiovisualBackgroundPlaybackPolicy = .continuesIfPossible
         try? AVAudioSession.sharedInstance().setActive(true)
         UIApplication.shared.isIdleTimerDisabled = true
+        // Con AirPlay serve un buffer pieno: l'avvio rapido (buffer ridotto) su AirPlay causa scatti
+        // e audio fuori sincrono. Si torna alla gestione automatica di iOS finché la TV è collegata.
+        externalObserver = player?.observe(\.isExternalPlaybackActive, options: [.initial, .new]) { p, _ in
+            DispatchQueue.main.async {
+                let external = p.isExternalPlaybackActive
+                p.automaticallyWaitsToMinimizeStalling = external
+                p.currentItem?.preferredForwardBufferDuration = external ? 0 : 4
+            }
+        }
     }
+
+    private var externalObserver: NSKeyValueObservation?
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)

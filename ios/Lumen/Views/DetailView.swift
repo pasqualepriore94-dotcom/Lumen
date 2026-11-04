@@ -146,8 +146,9 @@ struct DetailView: View {
             .overlay {
                 // Il trailer parte da solo in anteprima, con i controlli di YouTube.
                 if let id = previewId {
-                    TrailerPreview(videoId: id, muted: previewMuted, paused: previewPaused || trailer != nil,
-                                   controls: true, playing: $previewPlaying)
+                    // Non parte da solo: si vede la copertina del trailer e lo avvii tu con play.
+                    TrailerPreview(videoId: id, muted: false, paused: previewPaused || trailer != nil,
+                                   controls: true, autoplay: false, playing: $previewPlaying)
                         .opacity(previewPlaying ? 1 : 0)
                         .animation(.easeInOut(duration: 0.5), value: previewPlaying)
                         .allowsHitTesting(previewPlaying)

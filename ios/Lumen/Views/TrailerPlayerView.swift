@@ -122,12 +122,15 @@ struct TrailerPreview: UIViewRepresentable {
     var paused: Bool
     /// true: controlli di YouTube visibili e toccabili (scheda del titolo). false: solo video (clip).
     var controls: Bool = false
+    /// false: il trailer resta fermo sulla copertina finché l'utente non preme play.
+    var autoplay: Bool = true
     @Binding var playing: Bool
 
     func makeCoordinator() -> Coordinator { Coordinator(playing: $playing, controls: controls) }
 
     func makeUIView(context: Context) -> WKWebView {
         context.coordinator.lastMuted = muted
+        context.coordinator.lastPaused = paused
         let config = WKWebViewConfiguration()
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
@@ -149,15 +152,15 @@ struct TrailerPreview: UIViewRepresentable {
         #p{position:fixed;left:50%;top:50%;width:100%;height:100%;transform:translate(-50%,-50%);pointer-events:\(controls ? "auto" : "none")}
         </style></head><body><div id="p"></div>
         <script>
-        var player, wantMuted = \(muted), wantPaused = false;
+        var player, wantMuted = \(muted), wantPaused = \(autoplay ? "false" : "true");
         function post(v){ try{ window.webkit.messageHandlers.yt.postMessage(v) }catch(e){} }
         function onYouTubeIframeAPIReady(){
           player = new YT.Player('p', {
             host: 'https://www.youtube-nocookie.com', videoId: '\(videoId)', width: '100%', height: '100%',
-            playerVars: { autoplay: 1, mute: 1, playsinline: 1, controls: \(controls ? 1 : 0), rel: 0, modestbranding: 1,
+            playerVars: { autoplay: \(autoplay ? 1 : 0), mute: \(autoplay ? 1 : 0), playsinline: 1, controls: \(controls ? 1 : 0), rel: 0, modestbranding: 1,
                           loop: 1, playlist: '\(videoId)', iv_load_policy: 3, fs: \(controls ? 1 : 0), disablekb: \(controls ? 0 : 1), origin: '\(origin)' },
             events: {
-              onReady: function(e){ post(100); if(wantMuted){ e.target.mute() } else { e.target.unMute(); e.target.setVolume(100) }
+              onReady: function(e){ post(100); if(wantMuted && \(autoplay)){ e.target.mute() } else if(!wantMuted){ e.target.unMute(); e.target.setVolume(100) }
                                     if(!wantPaused){ e.target.playVideo() } },
               onStateChange: function(e){ post(e.data) },
               onError: function(e){ post(-2) }
@@ -178,7 +181,11 @@ struct TrailerPreview: UIViewRepresentable {
     func updateUIView(_ web: WKWebView, context: Context) {
         let c = context.coordinator
         if c.lastMuted != muted { c.lastMuted = muted; web.evaluateJavaScript("setMuted(\(muted))") }
-        if c.lastPaused != paused { c.lastPaused = paused; web.evaluateJavaScript("setPaused(\(paused))") }
+        if c.lastPaused != paused {
+            c.lastPaused = paused
+            // Senza avvio automatico si mette solo in pausa: a ripartire è l'utente.
+            if paused || autoplay { web.evaluateJavaScript("setPaused(\(paused))") }
+        }
     }
 
     static func dismantleUIView(_ web: WKWebView, coordinator: Coordinator) {
