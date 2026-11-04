@@ -49,7 +49,7 @@ final class ImportJob {
         switch phase {
         case .downloading: return "Lettura di \(sourceName)…"
         case .mapping: return paused ? "In pausa: riprende quando torni nell'app"
-                                     : "Abbinamento al catalogo \(mapper.done)/\(mapper.total)"
+                                     : "Ricerca nel catalogo: \(mapper.done.formatted())/\(mapper.total.formatted()) titoli diversi (da \(input.count.formatted()) voci)"
         case .ready: return "\(mapper.movies.count) film · \(mapper.series.count) serie · \(mapper.lives.count) dirette"
         case .idle: return ""
         }
