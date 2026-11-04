@@ -64,3 +64,4 @@ const env = {
 if (env.jwtSecret.length < 32) console.error("JWT_SECRET mancante o troppo corto (almeno 32 caratteri)");
 
 Deno.serve((req) => handle(req, { store, mailer, env }));
+// redeploy 2026-11-04T20:13:58Z: attiva l'invio email (RESEND_API_KEY)
