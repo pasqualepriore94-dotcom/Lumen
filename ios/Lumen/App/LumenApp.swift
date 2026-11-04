@@ -8,6 +8,7 @@ struct LumenApp: App {
     @State private var auth = AuthStore()
     @State private var updates = UpdateChecker()
     @State private var showSplash = true
+    @State private var whatsNew: ReleaseNote?
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -34,11 +35,19 @@ struct LumenApp: App {
             .animation(.easeInOut(duration: 0.35), value: auth.isLoggedIn)
             .overlay {
                 if showSplash {
-                    SplashView { withAnimation(.easeOut(duration: 0.3)) { showSplash = false } }
+                    SplashView {
+                        withAnimation(.easeOut(duration: 0.3)) { showSplash = false }
+                        // Dopo un aggiornamento: "Cosa c'è di nuovo" (una volta per versione).
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(600))
+                            whatsNew = WhatsNew.pending()
+                        }
+                    }
                         .transition(.opacity)
                         .zIndex(10)
                 }
             }
+            .sheet(item: $whatsNew) { WhatsNewSheet(note: $0) }
             .environment(app)
             .environment(library)
             .environment(auth)

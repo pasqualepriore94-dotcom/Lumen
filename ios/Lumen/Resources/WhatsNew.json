@@ -1,0 +1,21 @@
+[
+  {
+    "version": "0.22.1",
+    "title": "Novità di questa versione",
+    "items": [
+      {"icon": "sparkles", "text": "Questa schermata: a ogni aggiornamento ti mostra le novità, e le trovi anche tra le Notifiche."},
+      {"icon": "link", "text": "Il link di attivazione nell'email apre Lumen per confermare il nuovo account."},
+      {"icon": "airplayvideo", "text": "AirPlay più fluido per film e serie, e sincronizzazione dell'audio nel player VLC."},
+      {"icon": "play.rectangle", "text": "Nella scheda del titolo il trailer parte solo quando premi play."},
+      {"icon": "pip", "text": "Riduci a icona: Picture in Picture per i contenuti on demand e mini player per dirette e MKV."},
+      {"icon": "calendar.day.timeline.left", "text": "Guida TV (EPG) per le dirette, con programma in onda e palinsesto."}
+    ]
+  },
+  {
+    "version": "0.22.0",
+    "title": "Attivazione account dall'app",
+    "items": [
+      {"icon": "link", "text": "Il link di attivazione nell'email apre Lumen per confermare il nuovo account."}
+    ]
+  }
+]

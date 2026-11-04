@@ -109,6 +109,7 @@ jobs:
           SIZE=$(stat -f%z Lumen.ipa)
           REPO="${{ github.repository }}"
           PUBLIC="https://$PROJECT_REF.supabase.co/storage/v1/object/public/lumen"
+          NOTES=$(python3 -c "import json,sys;v=sys.argv[1];n=[x for x in json.load(open('Lumen/Resources/WhatsNew.json')) if x['version']==v];print(json.dumps('\\n'.join('• '+i['text'] for i in n[0]['items']) if n else 'Build ${{ github.run_number }}'))" "$VERSION" 2>/dev/null || echo '"Build ${{ github.run_number }}"')
           cat > lumen-source.json <<JSON
           {
             "name": "Lumen",
@@ -127,7 +128,7 @@ jobs:
                 "version": "$VERSION",
                 "buildVersion": "${{ github.run_number }}",
                 "date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-                "localizedDescription": "Build ${{ github.run_number }}",
+                "localizedDescription": $NOTES,
                 "downloadURL": "$PUBLIC/releases/$TAG/Lumen.ipa",
                 "size": $SIZE,
                 "minOSVersion": "17.0"
