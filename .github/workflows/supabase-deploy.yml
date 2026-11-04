@@ -44,7 +44,7 @@ jobs:
 
       - name: Crea/aggiorna la tabella utenti
         if: steps.check.outputs.ready == 'true'
-        run: supabase db push --linked -p "$SUPABASE_DB_PASSWORD" --include-all
+        run: supabase db push --linked --yes -p "$SUPABASE_DB_PASSWORD" --include-all
 
       - name: Imposta i segreti della funzione
         if: steps.check.outputs.ready == 'true'
@@ -53,11 +53,11 @@ jobs:
           JWT="${LUMEN_JWT_SECRET:-$(printf '%s' "lumen-jwt:$SUPABASE_DB_PASSWORD:$PROJECT_REF" | sha256sum | cut -d' ' -f1)}"
           ARGS=("JWT_SECRET=$JWT" "ADMIN_EMAIL=pasquale.priore94@gmail.com" "APP_NAME=Lumen")
           if [ -n "$RESEND_API_KEY" ]; then ARGS+=("RESEND_API_KEY=$RESEND_API_KEY"); else echo "::warning::RESEND_API_KEY assente: le email di attivazione non partiranno (gli utenti si attivano comunque dall'app)."; fi
-          supabase secrets set --project-ref "$PROJECT_REF" "${ARGS[@]}"
+          supabase secrets set --yes --project-ref "$PROJECT_REF" "${ARGS[@]}"
 
       - name: Pubblica la funzione lumen-auth
         if: steps.check.outputs.ready == 'true'
-        run: supabase functions deploy lumen-auth --no-verify-jwt --project-ref "$PROJECT_REF"
+        run: supabase functions deploy lumen-auth --yes --no-verify-jwt --project-ref "$PROJECT_REF"
 
       - name: Verifica
         if: steps.check.outputs.ready == 'true'
