@@ -120,8 +120,12 @@ final class WatchlistMonitor {
                     let key = "s\(s)e\(e)"
                     if !first, let previous = snap.lastEpisode, previous != key {
                         let name = (last["name"] as? String).flatMap { $0.isEmpty ? nil : " «\($0)»" } ?? ""
-                        let ready = links.link(seriesId: item.id, season: s, episode: e) != nil ? " È già pronto da guardare in Lumen." : ""
-                        alerts.append(("Nuovo episodio disponibile", "\(item.title) · S\(s) E\(e)\(name).\(ready)", "tv.badge.wifi"))
+                        if links.link(seriesId: item.id, season: s, episode: e) != nil {
+                            alerts.append(("Nuovo episodio disponibile", "\(item.title) · S\(s) E\(e)\(name). È pronto da guardare in Lumen.", "play.tv.fill"))
+                        } else {
+                            // Uscito in TV/streaming, ma non ancora nella tua playlist.
+                            alerts.append(("Nuovo episodio uscito", "\(item.title) · S\(s) E\(e)\(name). Non è ancora nella tua playlist: comparirà in Lumen quando verrà aggiunto.", "tv.badge.wifi"))
+                        }
                     }
                     snap.lastEpisode = key
                     snap.lastSeason = s
@@ -166,10 +170,16 @@ final class WatchlistMonitor {
             if let item = wanted[Self.norm(ParsedTitle.parse(m.title).title)] { hits[item.title, default: 0] += 1 }
         }
         for (title, count) in hits {
-            deliver(title: "Nuovo contenuto disponibile",
-                    body: "\(title): \(count == 1 ? "1 nuova voce" : "\(count) nuove voci") in \(playlistName). Analizza le novità per guardarle.",
+            deliver(title: "Novità nella playlist",
+                    body: "\(title): \(count == 1 ? "1 nuova voce" : "\(count) nuove voci") in \(playlistName). Da importare: apri Notifiche → Nuovi contenuti per analizzarle.",
                     icon: "sparkles.tv")
         }
+    }
+
+    /// Avviso per un titolo della lista (solo se è in "La mia lista").
+    func notifyIfListed(_ id: String, title: String, body: String, icon: String) {
+        guard state.items.contains(where: { $0.id == id }) else { return }
+        deliver(title: title, body: body, icon: icon)
     }
 
     // MARK: Supporto

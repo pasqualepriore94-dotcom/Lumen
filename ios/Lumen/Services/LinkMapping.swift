@@ -47,8 +47,11 @@ final class LinkMapper {
     @ObservationIgnored private(set) var cancelled = false
     @ObservationIgnored private var generation = 0
 
-    func reset() {
-        movies = []; series = []; lives = []; done = 0; total = 0; cancelled = true; cache = [:]; generation += 1; isMapping = false
+    /// `keepCache`: le ricerche già fatte nel catalogo restano valide anche per le analisi successive
+    /// (rianalizzare la stessa playlist è quasi immediato).
+    func reset(keepCache: Bool = true) {
+        movies = []; series = []; lives = []; done = 0; total = 0; cancelled = true; generation += 1; isMapping = false
+        if !keepCache { cache = [:] }
     }
 
     func cancel() { cancelled = true; generation += 1; isMapping = false }

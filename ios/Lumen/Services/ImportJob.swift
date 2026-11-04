@@ -331,7 +331,8 @@ final class ImportJob {
     }
 
     private static func deleteSaved() {
-        for url in [stateFile, inputFile, cacheFile] { try? FileManager.default.removeItem(at: url) }
+        // Le ricerche nel catalogo (cacheFile) restano: servono alle prossime analisi.
+        for url in [stateFile, inputFile] { try? FileManager.default.removeItem(at: url) }
     }
 
     nonisolated private static func load() -> Loaded? {
@@ -350,10 +351,18 @@ final class ImportJob {
         return nil
     }
 
+    nonisolated private static func loadCache() -> [String: CachedMatch] {
+        (try? Data(contentsOf: cacheFile)).flatMap { try? JSONDecoder().decode([String: CachedMatch].self, from: $0) } ?? [:]
+    }
+
     private func restore() {
         Task { [weak self] in
             let loaded = await Task.detached(priority: .userInitiated) { ImportJob.load() }.value
             guard let self else { return }
+            if loaded == nil, mapper.cache.isEmpty {
+                let cache = await Task.detached(priority: .utility) { ImportJob.loadCache() }.value
+                if mapper.cache.isEmpty { mapper.cache = cache }
+            }
             if let loaded, task == nil, phase == .idle {
                 let s = loaded.state
                 phase = s.phase

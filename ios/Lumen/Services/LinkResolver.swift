@@ -450,6 +450,38 @@ final class LinkLibrary {
         Task { await WatchlistMonitor.shared.check() }
     }
 
+    /// Episodi nuovi di serie già collegate: vengono aggiunti subito, senza analisi.
+    /// Restituisce gli id usati e, per serie, gli episodi aggiunti ("s2e5").
+    func autoLinkEpisodes(_ added: [LinkMedia]) -> (used: Set<String>, bySeries: [String: [String]]) {
+        func norm(_ s: String) -> String {
+            s.lowercased().folding(options: [.diacriticInsensitive], locale: nil)
+                .components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }.joined(separator: " ")
+        }
+        // Nome della serie nella playlist → serie del catalogo
+        var index: [String: String] = [:]
+        for (sid, eps) in episodeLinks {
+            for link in eps.values.prefix(3) {
+                let key = norm(ParsedTitle.parse(link.title).title)
+                if !key.isEmpty, index[key] == nil { index[key] = sid }
+            }
+        }
+        var used = Set<String>()
+        var bySeries: [String: [String: LinkMedia]] = [:]
+        for m in added where !m.isLive {
+            let p = ParsedTitle.parse(m.title)
+            guard let s = p.season, let e = p.episode, let sid = index[norm(p.title)] else { continue }
+            let key = "s\(s)e\(e)"
+            guard episodeLinks[sid]?[key] == nil else { continue }
+            bySeries[sid, default: [:]][key] = m
+            used.insert(m.id)
+        }
+        for (sid, eps) in bySeries {
+            guard let item = matchedItems[sid] else { continue }
+            setEpisodeLinks(eps, for: item)
+        }
+        return (used, bySeries.mapValues { Array($0.keys) })
+    }
+
     func setMovieLink(_ media: LinkMedia, for item: MediaItem) {
         if movieLinks[item.id] == nil { FreshnessStore.shared.mark(item.id, .added); FreshnessStore.shared.save() }
         movieLinks[item.id] = media

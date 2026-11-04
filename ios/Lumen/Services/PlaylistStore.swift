@@ -73,17 +73,12 @@ final class PlaylistStore {
                       text.contains("#EXTINF") else { return nil }
                 let fresh = PlaylistStore.parse(text, origin: origin)
                 let oldText = (try? Data(contentsOf: PlaylistStore.textFile(id))).flatMap { PlaylistStore.decode($0) } ?? ""
-                let old = Set(PlaylistStore.parse(oldText, origin: origin).map(\.id))
-                let added = fresh.filter { !old.contains($0.id) }
+                let oldList = PlaylistStore.parse(oldText, origin: origin)
+                let oldIds = Set(oldList.map(\.id))
+                // Anche per nome: se il fornitore cambia gli indirizzi (token), non sono contenuti nuovi.
+                let oldNames = Set(oldList.map { $0.title.lowercased() + "|" + ($0.group ?? "") })
+                let added = fresh.filter { !oldIds.contains($0.id) && !oldNames.contains($0.title.lowercased() + "|" + ($0.group ?? "")) }
                 try? text.data(using: .utf8)?.write(to: PlaylistStore.textFile(id), options: .atomic)
-                if !added.isEmpty {
-                    // Somma alle novità già in attesa
-                    var pending = (try? Data(contentsOf: PlaylistStore.pendingFile(id)))
-                        .flatMap { try? JSONDecoder().decode([LinkMedia].self, from: $0) } ?? []
-                    let known = Set(pending.map(\.id))
-                    pending += added.filter { !known.contains($0.id) }
-                    if let out = try? JSONEncoder().encode(pending) { try? out.write(to: PlaylistStore.pendingFile(id), options: .atomic) }
-                }
                 return (text, added, fresh.count, fresh.filter { !$0.isLive }.count, fresh.filter(\.isLive).count)
             }.value
             guard let diff, let i = playlists.firstIndex(where: { $0.id == id }) else { continue }
@@ -93,8 +88,31 @@ final class PlaylistStore {
             playlists[i].lives = diff.4
             if !diff.1.isEmpty { playlists[i].updatedAt = Date() }
             persist()
-            let added = diff.1
+            guard !diff.1.isEmpty else { continue }
+            // Nuovi episodi di serie già importate: subito disponibili (con etichetta Nuovo episodio).
+            let auto = LinkLibrary.shared.autoLinkEpisodes(diff.1)
+            for (sid, keys) in auto.bySeries {
+                let title = LinkLibrary.shared.matchedItems[sid]?.title ?? "Una serie"
+                let label = keys.count == 1 ? keys[0].uppercased().replacingOccurrences(of: "E", with: " E") : "\(keys.count) nuovi episodi"
+                WatchlistMonitor.shared.notifyIfListed(sid, title: "Nuovo episodio pronto da guardare",
+                                                       body: "\(title) · \(label). È già disponibile in Lumen.", icon: "play.tv.fill")
+            }
+            let added = diff.1.filter { !auto.used.contains($0.id) }
+            if !auto.used.isEmpty {
+                let n = auto.used.count
+                NotificationStore.shared.post(AppNotification(kind: .info, title: "Episodi aggiunti in automatico",
+                                                              body: "\(n == 1 ? "1 nuovo episodio" : "\(n) nuovi episodi") di serie già importate da \(playlists[i].name) sono pronti da guardare.",
+                                                              icon: "play.tv.fill"))
+            }
             guard !added.isEmpty else { continue }
+            // Le altre novità restano in attesa di analisi (sommate a quelle precedenti).
+            let pendingURL = Self.pendingFile(id)
+            await Task.detached(priority: .utility) {
+                var pending = (try? Data(contentsOf: pendingURL)).flatMap { try? JSONDecoder().decode([LinkMedia].self, from: $0) } ?? []
+                let known = Set(pending.map(\.id))
+                pending += added.filter { !known.contains($0.id) }
+                if let out = try? JSONEncoder().encode(pending) { try? out.write(to: pendingURL, options: .atomic) }
+            }.value
             WatchlistMonitor.shared.playlistAdded(added, playlistName: playlists[i].name)
             let vods = added.filter { !$0.isLive }
             let episodes = vods.filter { ParsedTitle.parse($0.title).isEpisode }.count
@@ -107,7 +125,7 @@ final class PlaylistStore {
             NotificationStore.shared.post(AppNotification(
                 kind: .newContent,
                 title: "Nuovi contenuti in \(playlists[i].name)",
-                body: parts.joined(separator: ", ") + ".",
+                body: parts.joined(separator: ", ") + ". Da analizzare e importare: tocca per iniziare.",
                 icon: "sparkles.tv",
                 playlistId: id))
         }

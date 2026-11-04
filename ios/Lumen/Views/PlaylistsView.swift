@@ -110,6 +110,7 @@ struct PlaylistDetailView: View {
     @State private var filter = ""
     @State private var showLive = false
     @State private var links = LinkLibrary.shared
+    @State private var liveMessage: String?
 
     private var visible: [LinkMedia] {
         let q = filter.trimmingCharacters(in: .whitespaces).lowercased()
@@ -138,6 +139,21 @@ struct PlaylistDetailView: View {
                 }
                 let imported = links.importedCount(Set(media.map(\.id)))
                 LabeledContent("Già importati", value: "\(imported)")
+                let lives = media.filter(\.isLive)
+                if !lives.isEmpty {
+                    let have = Set(links.items.map(\.id))
+                    let missing = lives.filter { !have.contains($0.id) }
+                    Button {
+                        links.add(missing)
+                        liveMessage = "\(missing.count) dirette aggiunte alla categoria Dirette della home."
+                    } label: {
+                        Label(missing.isEmpty ? "Tutte le dirette sono già importate"
+                                              : "Importa tutte le dirette (\(missing.count))",
+                              systemImage: "dot.radiowaves.left.and.right")
+                    }
+                    .disabled(missing.isEmpty)
+                    if let liveMessage { Text(liveMessage).font(.footnote).foregroundStyle(.secondary) }
+                }
                 Picker("Tipo", selection: $showLive) {
                     Text("On demand (\(media.filter { !$0.isLive }.count))").tag(false)
                     Text("Dirette (\(media.filter(\.isLive).count))").tag(true)
