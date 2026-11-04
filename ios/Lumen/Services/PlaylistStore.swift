@@ -14,6 +14,8 @@ struct SavedPlaylist: Codable, Identifiable, Hashable {
     var lives = 0
     /// Ultimo controllo automatico dei nuovi contenuti (solo playlist da link).
     var lastChecked: Date?
+    /// Guida TV (XMLTV) indicata nell'intestazione della playlist (url-tvg / x-tvg-url).
+    var epgURL: String?
 
     var isFromFile: Bool { !origin.lowercased().hasPrefix("http") }
 }
@@ -151,10 +153,36 @@ final class PlaylistStore {
         p.entries = media.count
         p.vods = media.filter { !$0.isLive }.count
         p.lives = media.filter(\.isLive).count
+        if let epg = Self.epgURL(in: text) { p.epgURL = epg; EPGStore.shared.suggest(epg) }
         try? text.data(using: .utf8)?.write(to: Self.textFile(p.id))
         if let i = playlists.firstIndex(where: { $0.id == p.id }) { playlists[i] = p } else { playlists.insert(p, at: 0) }
         persist()
         return (p, media)
+    }
+
+    /// Indirizzo della guida TV nell'intestazione #EXTM3U (può contenerne più d'uno separati da virgola).
+    nonisolated static func epgURL(in text: String) -> String? {
+        guard let header = text.prefix(4000).split(whereSeparator: \.isNewline).first(where: { $0.contains("#EXTM3U") }) else { return nil }
+        for key in ["url-tvg=\"", "x-tvg-url=\"", "tvg-url=\""] {
+            if let r = header.range(of: key), let end = header[r.upperBound...].firstIndex(of: "\"") {
+                let v = header[r.upperBound..<end].split(separator: ",").first.map(String.init)?.trimmingCharacters(in: .whitespaces)
+                if let v, v.lowercased().hasPrefix("http") { return v }
+            }
+        }
+        return nil
+    }
+
+    /// Guida TV indicata in una delle playlist salvate (anche quelle caricate prima del supporto EPG).
+    func detectEPGURL() -> String? {
+        for p in playlists {
+            if let e = p.epgURL { return e }
+            if let h = try? FileHandle(forReadingFrom: Self.textFile(p.id)) {
+                let d = h.readData(ofLength: 4000)
+                try? h.close()
+                if let t = String(data: d, encoding: .utf8) ?? String(data: d, encoding: .isoLatin1), let e = Self.epgURL(in: t) { return e }
+            }
+        }
+        return nil
     }
 
     func media(of p: SavedPlaylist) -> [LinkMedia] {

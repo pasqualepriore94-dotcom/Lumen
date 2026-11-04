@@ -52,7 +52,8 @@ enum Playback {
     static func playLink(_ media: LinkMedia, app: AppState, library: Library) {
         if media.isLive {
             // Dirette: sempre con VLC (flussi MPEG-TS/HLS dei canali), senza salvare l'avanzamento.
-            let vlc = VLCPlayerViewController(url: media.url, title: media.title, startAt: 0)
+            let now = EPGStore.shared.now(for: media).map { " · \($0.title)" } ?? ""
+            let vlc = VLCPlayerViewController(url: media.url, title: media.title + now, startAt: 0)
             topViewController()?.present(vlc, animated: true)
             return
         }

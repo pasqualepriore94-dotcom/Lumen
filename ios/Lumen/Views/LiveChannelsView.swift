@@ -66,6 +66,13 @@ struct LiveTile: View {
             }
             Text(channel.title).font(.caption.weight(.semibold)).foregroundStyle(.white).lineLimit(1)
                 .frame(width: width, alignment: .leading)
+            if let now = EPGStore.shared.now(for: channel) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(now.title).font(.system(size: 10)).foregroundStyle(Theme.secondaryText).lineLimit(1)
+                    ProgressView(value: now.progress).tint(app.accent).scaleEffect(x: 1, y: 0.6, anchor: .center)
+                }
+                .frame(width: width, alignment: .leading)
+            }
         }
     }
 
@@ -85,6 +92,9 @@ struct LiveChannelsView: View {
     @State private var links = LinkLibrary.shared
     @State private var search = ""
     @State private var group: String?
+    @State private var epg = EPGStore.shared
+    @State private var showEPGSettings = false
+    @State private var guideChannel: LinkMedia?
 
     private let columns = [GridItem(.adaptive(minimum: 104), spacing: 10)]
 
@@ -130,6 +140,7 @@ struct LiveChannelsView: View {
                             .buttonStyle(.plain)
                             .contextMenu {
                                 Button("Guarda", systemImage: "play.fill") { Playback.playLink(m, app: app, library: library) }
+                                Button("Guida del canale", systemImage: "list.bullet.rectangle") { guideChannel = m }
                                 if auth.isAdmin {
                                     Button("Rimuovi dalle dirette", systemImage: "trash", role: .destructive) {
                                         withAnimation { links.remove(m) }
@@ -149,9 +160,19 @@ struct LiveChannelsView: View {
             .background(Color.black.ignoresSafeArea())
             .navigationTitle("Dirette")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Chiudi") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { showEPGSettings = true } label: {
+                        if epg.isUpdating { ProgressView() } else { Label("Guida TV", systemImage: "calendar.day.timeline.left") }
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) { Button("Chiudi") { dismiss() } }
+            }
+            .sheet(isPresented: $showEPGSettings) { EPGSettingsView() }
+            .sheet(item: $guideChannel) { ChannelGuideView(channel: $0) }
         }
         .preferredColorScheme(.dark)
+        .task { await epg.refreshIfNeeded(channels: links.lives) }
     }
 
     private func chip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
@@ -161,5 +182,108 @@ struct LiveChannelsView: View {
         }
         .buttonStyle(GlassButtonStyle(tint: selected ? app.accent : nil))
         .foregroundStyle(.white)
+    }
+}
+
+
+/// Programmi di un canale (guida TV).
+struct ChannelGuideView: View {
+    @Environment(AppState.self) private var app
+    @Environment(Library.self) private var library
+    @Environment(\.dismiss) private var dismiss
+    let channel: LinkMedia
+
+    var body: some View {
+        NavigationStack {
+            List {
+                let list = EPGStore.shared.upcoming(for: channel)
+                if list.isEmpty {
+                    ContentUnavailableView("Guida non disponibile", systemImage: "calendar.badge.exclamationmark",
+                                           description: Text("Per questo canale non ci sono programmi nella guida TV."))
+                }
+                ForEach(list, id: \.self) { p in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(p.start.formatted(date: .omitted, time: .shortened) + " – " + p.stop.formatted(date: .omitted, time: .shortened))
+                                .font(.caption.monospacedDigit()).foregroundStyle(p.isNow ? app.accent : .secondary)
+                            if p.isNow {
+                                Text("IN ONDA").font(.system(size: 9, weight: .heavy)).foregroundStyle(.white)
+                                    .padding(.horizontal, 5).padding(.vertical, 2).background(.red, in: Capsule())
+                            }
+                            Spacer()
+                            if !Calendar.current.isDateInToday(p.start) {
+                                Text(p.start.formatted(.dateTime.weekday(.wide).locale(Locale(identifier: "it_IT"))))
+                                    .font(.caption2).foregroundStyle(.secondary)
+                            }
+                        }
+                        Text(p.title).font(.subheadline.weight(p.isNow ? .bold : .semibold))
+                        if let d = p.desc { Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(3) }
+                        if p.isNow { ProgressView(value: p.progress).tint(app.accent) }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
+            .navigationTitle(channel.title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Guarda", systemImage: "play.fill") {
+                        dismiss()
+                        Task { @MainActor in
+                            try? await Task.sleep(for: .milliseconds(400))
+                            Playback.playLink(channel, app: app, library: library)
+                        }
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) { Button("Chiudi") { dismiss() } }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .preferredColorScheme(.dark)
+    }
+}
+
+/// Impostazioni della guida TV: indirizzo XMLTV (trovato nella playlist o inserito a mano) e aggiornamento.
+struct EPGSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var epg = EPGStore.shared
+    @State private var draft = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("https://…/guide.xml.gz", text: $draft)
+                        .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    Button {
+                        epg.url = draft.trimmingCharacters(in: .whitespaces)
+                        Task { await epg.refresh(channels: LinkLibrary.shared.lives) }
+                    } label: {
+                        HStack {
+                            Label("Salva e aggiorna la guida", systemImage: "arrow.clockwise")
+                            Spacer()
+                            if epg.isUpdating { ProgressView() }
+                        }
+                    }
+                    .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty || epg.isUpdating)
+                } header: {
+                    Text("Indirizzo della guida (XMLTV)")
+                } footer: {
+                    Text("Se la playlist indica una guida (url-tvg) viene inserita in automatico. I canali vengono abbinati per tvg-id o per nome. La guida si aggiorna da sola ogni 12 ore.")
+                }
+                Section("Stato") {
+                    if let status = epg.status { Text(status).font(.footnote) }
+                    if let last = epg.lastUpdate {
+                        LabeledContent("Ultimo aggiornamento", value: last.formatted(date: .abbreviated, time: .shortened))
+                    }
+                    LabeledContent("Canali con guida", value: "\(epg.programs.values.filter { !$0.isEmpty }.count)")
+                }
+            }
+            .navigationTitle("Guida TV")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fine") { dismiss() } } }
+            .onAppear { draft = epg.url }
+        }
+        .preferredColorScheme(.dark)
     }
 }

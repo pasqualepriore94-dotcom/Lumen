@@ -119,19 +119,17 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
         controls.layer.setValue(shade, forKey: "shade")
 
         func glassButton(_ symbol: String, size: CGFloat, action: Selector) -> UIButton {
-            let b = UIButton(type: .system)
-            b.setImage(UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: .semibold)), for: .normal)
+            // Sfondo sfocato gestito dalla configurazione del pulsante: l'icona resta sempre sopra
+            // (prima lo sfondo inserito a mano copriva l'icona e si vedeva solo un cerchio grigio).
+            var config = UIButton.Configuration.plain()
+            config.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: .semibold))
+            config.baseForegroundColor = .white
+            config.cornerStyle = .capsule
+            config.background.visualEffect = UIBlurEffect(style: .systemUltraThinMaterialDark)
+            config.background.backgroundColor = UIColor.white.withAlphaComponent(0.08)
+            config.background.cornerRadius = 22
+            let b = UIButton(configuration: config)
             b.tintColor = .white
-            let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
-            blur.isUserInteractionEnabled = false
-            blur.layer.cornerRadius = 22
-            blur.clipsToBounds = true
-            blur.translatesAutoresizingMaskIntoConstraints = false
-            b.insertSubview(blur, at: 0)
-            NSLayoutConstraint.activate([
-                blur.leadingAnchor.constraint(equalTo: b.leadingAnchor), blur.trailingAnchor.constraint(equalTo: b.trailingAnchor),
-                blur.topAnchor.constraint(equalTo: b.topAnchor), blur.bottomAnchor.constraint(equalTo: b.bottomAnchor),
-            ])
             b.addTarget(self, action: action, for: .touchUpInside)
             b.translatesAutoresizingMaskIntoConstraints = false
             return b

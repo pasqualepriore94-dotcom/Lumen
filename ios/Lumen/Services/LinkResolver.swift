@@ -12,6 +12,8 @@ struct LinkMedia: Codable, Identifiable, Hashable {
     var source: String
     /// Categoria della playlist (group-title), es. "Film" o "Serie TV".
     var group: String? = nil
+    /// Identificativo del canale per la guida TV (tvg-id).
+    var tvgId: String? = nil
 
     var asItem: MediaItem {
         MediaItem(id: "link-" + SHA256.hash(data: Data(url.absoluteString.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined(),
@@ -98,6 +100,7 @@ enum LinkResolver {
         var pendingLogo: URL?
         var pendingGroup: String?
         var pendingDuration: Int?
+        var pendingTvg: String?
         for raw in text.components(separatedBy: .newlines) {
             let line = raw.trimmingCharacters(in: .whitespaces)
             if line.hasPrefix("#EXTINF") {
@@ -112,11 +115,16 @@ enum LinkResolver {
                 if let r = line.range(of: "group-title=\""), let end = line[r.upperBound...].firstIndex(of: "\"") {
                     pendingGroup = String(line[r.upperBound..<end])
                 }
+                if let r = line.range(of: "tvg-id=\""), let end = line[r.upperBound...].firstIndex(of: "\"") {
+                    let v = String(line[r.upperBound..<end])
+                    pendingTvg = v.isEmpty ? nil : v
+                }
             } else if !line.isEmpty, !line.hasPrefix("#"), let u = URL(string: line, relativeTo: base)?.absoluteURL {
                 let title = (pendingTitle?.isEmpty == false ? pendingTitle! : prettyTitle(u))
                 let isVOD = classifyVOD(url: u, title: title, group: pendingGroup, duration: pendingDuration)
                 items.append(LinkMedia(title: title, url: u, poster: pendingLogo,
-                                       isLive: !isVOD, source: "Playlist", group: pendingGroup))
+                                       isLive: !isVOD, source: "Playlist", group: pendingGroup, tvgId: isVOD ? nil : pendingTvg))
+                pendingTvg = nil
                 pendingTitle = nil
                 pendingLogo = nil
                 pendingGroup = nil
