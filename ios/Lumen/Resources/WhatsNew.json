@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.23.0",
+    "title": "Chiedi a Lumen",
+    "items": [
+      {
+        "icon": "sparkles",
+        "text": "Nuovo assistente con Apple Intelligence: descrivi a parole cosa ti va di vedere e Lumen ti propone film e serie, spiegando perché."
+      },
+      {
+        "icon": "magnifyingglass",
+        "text": "Non ricordi un titolo? In Cerca tocca \"Descrivilo a Lumen\": per esempio \"il film dell'astronauta rimasto su Marte\"."
+      },
+      {
+        "icon": "play.fill",
+        "text": "I suggerimenti già presenti nella tua playlist sono in cima, con \"Disponibile in Lumen\"."
+      },
+      {
+        "icon": "lock.shield",
+        "text": "Tutto avviene sul tuo iPhone: le richieste non lasciano il telefono."
+      }
+    ]
+  },
+  {
     "version": "0.22.2",
     "title": "Analisi più chiara",
     "items": [

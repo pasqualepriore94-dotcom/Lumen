@@ -10,6 +10,8 @@ struct SearchView: View {
     @State private var searching = false
     @State private var errorMessage: String?
     @FocusState private var focused: Bool
+    @State private var showAssistant = false
+    @State private var assistantQuestion = ""
 
     private let columns = [GridItem(.adaptive(minimum: 104), spacing: 8)]
 
@@ -17,6 +19,7 @@ struct SearchView: View {
         VStack(spacing: 0) {
             TabHeader(title: "Cerca", showsLogo: false)
             searchBar
+            assistantButton
             ScrollViewReader { proxy in
             ScrollView {
                 Color.clear.frame(height: 0).id("search-top")
@@ -32,10 +35,30 @@ struct SearchView: View {
             .scrollIndicators(.hidden)
         }
         .background(Color.black.ignoresSafeArea())
+        .sheet(isPresented: $showAssistant) { AssistantView(initialQuestion: assistantQuestion) }
         .task(id: app.contentKey) {
             recommended = (try? await app.provider.home().allItems) ?? []
         }
         .task(id: query + app.contentKey) { await runSearch() }
+    }
+
+    /// Ricerca a parole con Apple Intelligence ("il film dell'astronauta su Marte").
+    private var assistantButton: some View {
+        Button {
+            assistantQuestion = query
+            showAssistant = true
+        } label: {
+            Label(query.trimmingCharacters(in: .whitespaces).isEmpty
+                  ? "Non ricordi il titolo? Descrivilo a Lumen"
+                  : "Chiedi a Lumen: “\(query)”", systemImage: "sparkles")
+                .font(.footnote.weight(.semibold)).lineLimit(1)
+                .padding(.horizontal, 14).padding(.vertical, 9)
+        }
+        .buttonStyle(GlassButtonStyle(tint: app.accent.opacity(0.5)))
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
     }
 
     private var searchBar: some View {
@@ -69,7 +92,7 @@ struct SearchView: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.bottom, 10)
+        .padding(.bottom, 6)
         .animation(.snappy(duration: 0.2), value: focused)
     }
 

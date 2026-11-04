@@ -15,6 +15,7 @@ struct HomeView: View {
     @State private var errorMessage: String?
     @State private var activeFilter: HomeFilter?
     @State private var showLive = false
+    @State private var showAssistant = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -71,6 +72,7 @@ struct HomeView: View {
         }
         .task(id: app.contentKey) { await load() }
         .sheet(isPresented: $showLive) { LiveChannelsView() }
+        .sheet(isPresented: $showAssistant) { AssistantView() }
     }
 
     // MARK: Filtri
@@ -79,6 +81,12 @@ struct HomeView: View {
     private func chips(proxy: ScrollViewProxy) -> some View {
         ScrollView(.horizontal) {
             HStack(spacing: 8) {
+                if activeFilter == nil {
+                    Button { showAssistant = true } label: {
+                        Label("Chiedi a Lumen", systemImage: "sparkles").chipStyle()
+                    }
+                    .buttonStyle(GlassButtonStyle(tint: app.accent.opacity(0.6)))
+                }
                 if activeFilter != nil {
                     Button {
                         withAnimation(.snappy) { activeFilter = nil }
