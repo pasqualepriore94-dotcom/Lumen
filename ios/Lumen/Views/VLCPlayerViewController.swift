@@ -92,15 +92,43 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
         ])
         player.media = media
         player.play()
+        // Lo schermo non si spegne da solo durante la riproduzione (utile anche con Duplica schermo).
+        UIApplication.shared.isIdleTimerDisabled = true
         scheduleHide()
     }
 
+    /// true mentre il video è ridotto a icona (mini player): chiudere la schermata non ferma la riproduzione.
+    var isMinimized = false
+    var isPlaying: Bool { player.isPlaying }
+
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        hideTimer?.invalidate()
+        if isMinimized { return }
+        finishPlayback()
+    }
+
+    /// Ferma la riproduzione, salva l'avanzamento e libera lo schermo.
+    func finishPlayback() {
         saveProgress(force: true)
         player.stop()
-        hideTimer?.invalidate()
-        if isBeingDismissed { onClose?() }
+        UIApplication.shared.isIdleTimerDisabled = false
+        onClose?()
+        onClose = nil
+    }
+
+    /// Sposta il video in un'altra vista (mini player) o lo riporta a schermo intero.
+    func attachVideo(to view: UIView?) {
+        player.drawable = view ?? videoView
+    }
+
+    func togglePlay() {
+        if player.isPlaying { player.pause() } else { player.play() }
+        updatePlayIcon(playing: !player.isPlaying)
+    }
+
+    @objc private func minimizeTapped() {
+        MiniPlayer.shared.minimize(self)
     }
 
     // MARK: Interfaccia
@@ -141,6 +169,14 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
         let close = glassButton("xmark", size: 15, action: #selector(closeTapped))
         let airplay = glassButton("airplayvideo", size: 17, action: #selector(airPlayTapped))
         controls.addSubview(airplay)
+        let mini = glassButton("pip.enter", size: 16, action: #selector(minimizeTapped))
+        controls.addSubview(mini)
+        NSLayoutConstraint.activate([
+            mini.leadingAnchor.constraint(equalTo: close.trailingAnchor, constant: 8),
+            mini.centerYAnchor.constraint(equalTo: close.centerYAnchor),
+            mini.widthAnchor.constraint(equalToConstant: 44), mini.heightAnchor.constraint(equalToConstant: 44),
+        ])
+        miniButton = mini
         airplayButton = airplay
         controls.addSubview(close)
 
@@ -190,7 +226,7 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
             close.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 16),
             close.topAnchor.constraint(equalTo: g.topAnchor, constant: 12),
             close.widthAnchor.constraint(equalToConstant: 44), close.heightAnchor.constraint(equalToConstant: 44),
-            titleLabel.leadingAnchor.constraint(equalTo: close.trailingAnchor, constant: 12),
+            titleLabel.leadingAnchor.constraint(equalTo: close.trailingAnchor, constant: 64),
             titleLabel.centerYAnchor.constraint(equalTo: close.centerYAnchor),
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: airplay.leadingAnchor, constant: -12),
             airplay.trailingAnchor.constraint(equalTo: tracksButton.leadingAnchor, constant: -8),
@@ -268,6 +304,7 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
     @objc private func closeTapped() { dismiss(animated: true) }
 
     private weak var airplayButton: UIButton?
+    private weak var miniButton: UIButton?
 
     /// AirPlay: VLC non può inviare il video ad AirPlay, il player di iOS sì (con flussi HLS).
     /// Se il fornitore offre la stessa diretta in HLS (.m3u8) si passa a quel player e si apre la scelta del dispositivo;
@@ -402,5 +439,149 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
         let s = Int(seconds)
         return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60)
                          : String(format: "%d:%02d", s / 60, s % 60)
+    }
+}
+
+
+/// Mini player per i contenuti riprodotti con VLC (dirette, MKV…): il video resta in un riquadro
+/// mobile sopra l'app mentre sfogli il catalogo. Tocca per tornare a schermo intero.
+@MainActor
+final class MiniPlayer {
+    static let shared = MiniPlayer()
+
+    private var window: PassthroughWindow?
+    private var vlc: VLCPlayerViewController?
+    private weak var card: UIView?
+    private weak var playButton: UIButton?
+
+    func minimize(_ controller: VLCPlayerViewController) {
+        close()   // un solo mini player alla volta
+        vlc = controller
+        controller.isMinimized = true
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive }) ?? UIApplication.shared.connectedScenes.first as? UIWindowScene
+        else { return }
+
+        let w = PassthroughWindow(windowScene: scene)
+        w.windowLevel = .statusBar - 1
+        w.backgroundColor = .clear
+        let root = UIViewController()
+        root.view.backgroundColor = .clear
+        w.rootViewController = root
+
+        let width: CGFloat = 220, height: CGFloat = width * 9 / 16
+        let bounds = scene.screen.bounds
+        let card = UIView(frame: CGRect(x: bounds.width - width - 14, y: bounds.height - height - 130, width: width, height: height))
+        card.backgroundColor = .black
+        card.layer.cornerRadius = 14
+        card.layer.cornerCurve = .continuous
+        card.clipsToBounds = true
+        card.layer.borderColor = UIColor.white.withAlphaComponent(0.2).cgColor
+        card.layer.borderWidth = 0.6
+        let shadowHost = UIView(frame: card.frame)
+        shadowHost.layer.shadowColor = UIColor.black.cgColor
+        shadowHost.layer.shadowOpacity = 0.5
+        shadowHost.layer.shadowRadius = 14
+        shadowHost.layer.shadowOffset = CGSize(width: 0, height: 6)
+        card.frame = shadowHost.bounds
+        shadowHost.addSubview(card)
+        root.view.addSubview(shadowHost)
+        w.passthroughTarget = shadowHost
+
+        let video = UIView(frame: card.bounds)
+        video.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        video.isUserInteractionEnabled = false
+        card.addSubview(video)
+
+        func button(_ symbol: String, _ action: @escaping () -> Void) -> UIButton {
+            var c = UIButton.Configuration.plain()
+            c.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .bold))
+            c.baseForegroundColor = .white
+            c.background.visualEffect = UIBlurEffect(style: .systemUltraThinMaterialDark)
+            c.background.cornerRadius = 15
+            c.cornerStyle = .capsule
+            let b = UIButton(configuration: c, primaryAction: UIAction { _ in action() })
+            b.frame.size = CGSize(width: 30, height: 30)
+            return b
+        }
+        let closeButton = button("xmark") { [weak self] in self?.close() }
+        closeButton.frame.origin = CGPoint(x: 6, y: 6)
+        let play = button(controller.isPlaying ? "pause.fill" : "play.fill") { [weak self] in self?.togglePlay() }
+        play.frame.origin = CGPoint(x: width - 36, y: 6)
+        let expand = button("arrow.up.left.and.arrow.down.right") { [weak self] in self?.expand() }
+        expand.frame.origin = CGPoint(x: width - 36, y: height - 36)
+        card.addSubview(closeButton)
+        card.addSubview(play)
+        card.addSubview(expand)
+        playButton = play
+
+        let tap = UITapGestureRecognizer(target: self, action: #selector(tapped))
+        shadowHost.addGestureRecognizer(tap)
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(dragged(_:)))
+        shadowHost.addGestureRecognizer(pan)
+
+        w.isHidden = false
+        window = w
+        self.card = shadowHost
+        controller.attachVideo(to: video)
+        controller.dismiss(animated: true)
+    }
+
+    private func togglePlay() {
+        guard let vlc else { return }
+        vlc.togglePlay()
+        var c = playButton?.configuration
+        c?.image = UIImage(systemName: vlc.isPlaying ? "play.fill" : "pause.fill",
+                           withConfiguration: UIImage.SymbolConfiguration(pointSize: 13, weight: .bold))
+        playButton?.configuration = c
+    }
+
+    @objc private func tapped() { expand() }
+
+    /// Torna a schermo intero.
+    func expand() {
+        guard let vlc else { return }
+        window?.isHidden = true
+        window = nil
+        self.vlc = nil
+        vlc.isMinimized = false
+        vlc.attachVideo(to: nil)
+        Playback.topViewController()?.present(vlc, animated: true)
+    }
+
+    /// Chiude il mini player e ferma la riproduzione.
+    func close() {
+        guard let vlc else { return }
+        vlc.isMinimized = false
+        vlc.finishPlayback()
+        window?.isHidden = true
+        window = nil
+        self.vlc = nil
+    }
+
+    @objc private func dragged(_ g: UIPanGestureRecognizer) {
+        guard let card, let host = card.superview else { return }
+        let t = g.translation(in: host)
+        card.center = CGPoint(x: card.center.x + t.x, y: card.center.y + t.y)
+        g.setTranslation(.zero, in: host)
+        if g.state == .ended || g.state == .cancelled {
+            // Si aggancia al bordo più vicino
+            let b = host.bounds.inset(by: host.safeAreaInsets).insetBy(dx: 12, dy: 12)
+            let x = card.center.x < host.bounds.midX ? b.minX + card.bounds.width / 2 : b.maxX - card.bounds.width / 2
+            let y = min(max(card.center.y, b.minY + card.bounds.height / 2), b.maxY - card.bounds.height / 2 - 80)
+            UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0) {
+                card.center = CGPoint(x: x, y: y)
+            }
+        }
+    }
+}
+
+/// Finestra che riceve i tocchi solo sul mini player: il resto passa all'app sotto.
+final class PassthroughWindow: UIWindow {
+    weak var passthroughTarget: UIView?
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard let target = passthroughTarget else { return nil }
+        let p = convert(point, to: target)
+        return target.bounds.contains(p) ? super.hitTest(point, with: event) : nil
     }
 }

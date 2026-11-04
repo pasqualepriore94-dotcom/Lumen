@@ -78,6 +78,7 @@ enum Playback {
         let player = AVPlayer(playerItem: item)
         player.allowsExternalPlayback = true
         player.automaticallyWaitsToMinimizeStalling = false
+        player.audiovisualBackgroundPlaybackPolicy = .continuesIfPossible
         let controller = LumenPlayerViewController()
         controller.player = player
         controller.modalPresentationStyle = .fullScreen
@@ -116,6 +117,7 @@ enum Playback {
         playerItem.preferredForwardBufferDuration = 4
         let player = AVPlayer(playerItem: playerItem)
         player.automaticallyWaitsToMinimizeStalling = false
+        player.audiovisualBackgroundPlaybackPolicy = .continuesIfPossible
 
         let start = library.resumePosition(itemId: item.id, episodeId: episodeId)
         if start > 5 {
@@ -183,12 +185,68 @@ enum Playback {
 
 final class LumenPlayerViewController: AVPlayerViewController {
     var onClose: (() -> Void)?
+    /// true mentre il video è in Picture in Picture: la schermata chiusa non ferma la riproduzione.
+    var inPiP = false
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        // Riduci a icona (Picture in Picture), anche in automatico uscendo dall'app.
+        allowsPictureInPicturePlayback = true
+        canStartPictureInPictureAutomaticallyFromInline = true
+        delegate = PiPCoordinator.shared
+        player?.allowsExternalPlayback = true
+        // Con AirPlay o in PiP la riproduzione continua anche a telefono bloccato.
+        player?.audiovisualBackgroundPlaybackPolicy = .continuesIfPossible
+        try? AVAudioSession.sharedInstance().setActive(true)
+        UIApplication.shared.isIdleTimerDisabled = true
+    }
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
-        if isBeingDismissed || presentingViewController == nil {
-            onClose?()
-            onClose = nil
+        if inPiP { return }
+        if isBeingDismissed || presentingViewController == nil { finish() }
+    }
+
+    func finish() {
+        UIApplication.shared.isIdleTimerDisabled = false
+        onClose?()
+        onClose = nil
+    }
+}
+
+/// Gestisce il Picture in Picture: tiene vivo il player mentre è ridotto a icona e lo riapre a schermo intero.
+final class PiPCoordinator: NSObject, AVPlayerViewControllerDelegate {
+    static let shared = PiPCoordinator()
+    private var active: LumenPlayerViewController?
+
+    func playerViewControllerWillStartPictureInPicture(_ controller: AVPlayerViewController) {
+        MainActor.assumeIsolated {
+            guard let c = controller as? LumenPlayerViewController else { return }
+            c.inPiP = true
+            active = c
+        }
+    }
+
+    func playerViewControllerShouldAutomaticallyDismissAtPictureInPictureStart(_ controller: AVPlayerViewController) -> Bool { true }
+
+    func playerViewController(_ controller: AVPlayerViewController,
+                              restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completion: @escaping (Bool) -> Void) {
+        MainActor.assumeIsolated {
+            guard controller.presentingViewController == nil, let top = Playback.topViewController() else { completion(true); return }
+            top.present(controller, animated: true) { completion(true) }
+        }
+    }
+
+    func playerViewControllerDidStopPictureInPicture(_ controller: AVPlayerViewController) {
+        MainActor.assumeIsolated {
+            guard let c = controller as? LumenPlayerViewController else { return }
+            c.inPiP = false
+            // Chiuso dal riquadro senza tornare a schermo intero: fine della riproduzione.
+            if c.presentingViewController == nil {
+                c.player?.pause()
+                c.finish()
+            }
+            if active === c { active = nil }
         }
     }
 }
