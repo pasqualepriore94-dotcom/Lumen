@@ -1,4 +1,5 @@
 import UIKit
+import AVKit
 import MobileVLCKit
 
 /// Player basato su VLC per i formati che il player di iOS non legge (MKV, AVI, WebM, FLV, WMV…).
@@ -22,6 +23,8 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
     private let startAt: Double
     var onProgress: ((Double, Double) -> Void)?
     var onClose: (() -> Void)?
+    /// Passa al player di iOS (che supporta AirPlay) con la versione HLS dello stesso flusso.
+    var onAirPlayNative: ((URL) -> Void)?
 
     private let player = VLCMediaPlayer()
     private let videoView = UIView()
@@ -136,6 +139,9 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
         }
 
         let close = glassButton("xmark", size: 15, action: #selector(closeTapped))
+        let airplay = glassButton("airplayvideo", size: 17, action: #selector(airPlayTapped))
+        controls.addSubview(airplay)
+        airplayButton = airplay
         controls.addSubview(close)
 
         titleLabel.text = titleText
@@ -186,7 +192,10 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
             close.widthAnchor.constraint(equalToConstant: 44), close.heightAnchor.constraint(equalToConstant: 44),
             titleLabel.leadingAnchor.constraint(equalTo: close.trailingAnchor, constant: 12),
             titleLabel.centerYAnchor.constraint(equalTo: close.centerYAnchor),
-            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: tracksButton.leadingAnchor, constant: -12),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: airplay.leadingAnchor, constant: -12),
+            airplay.trailingAnchor.constraint(equalTo: tracksButton.leadingAnchor, constant: -8),
+            airplay.centerYAnchor.constraint(equalTo: close.centerYAnchor),
+            airplay.widthAnchor.constraint(equalToConstant: 44), airplay.heightAnchor.constraint(equalToConstant: 44),
             tracksButton.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -16),
             tracksButton.centerYAnchor.constraint(equalTo: close.centerYAnchor),
             tracksButton.widthAnchor.constraint(equalToConstant: 44), tracksButton.heightAnchor.constraint(equalToConstant: 44),
@@ -257,6 +266,63 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
     }
 
     @objc private func closeTapped() { dismiss(animated: true) }
+
+    private weak var airplayButton: UIButton?
+
+    /// AirPlay: VLC non può inviare il video ad AirPlay, il player di iOS sì (con flussi HLS).
+    /// Se il fornitore offre la stessa diretta in HLS (.m3u8) si passa a quel player e si apre la scelta del dispositivo;
+    /// altrimenti si suggerisce Duplica schermo.
+    @objc private func airPlayTapped() {
+        scheduleHide()
+        airplayButton?.isEnabled = false
+        spinner.startAnimating()
+        let source = url
+        Task { @MainActor in
+            let hls = await Self.hlsVariant(of: source)
+            self.spinner.stopAnimating()
+            self.airplayButton?.isEnabled = true
+            if let hls, let switchTo = self.onAirPlayNative {
+                self.player.stop()
+                self.dismiss(animated: true) { switchTo(hls) }
+                return
+            }
+            let alert = UIAlertController(
+                title: "AirPlay",
+                message: "Questo flusso è in un formato che AirPlay non riceve direttamente. Per vederlo sulla TV apri il Centro di Controllo e scegli Duplica schermo: Lumen verrà mostrata sulla TV a tutto schermo.",
+                preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "Invia solo l'audio", style: .default) { _ in Self.showRoutePicker(in: self.view) })
+            alert.addAction(UIAlertAction(title: "OK", style: .cancel))
+            self.present(alert, animated: true)
+        }
+    }
+
+    /// Prova la versione HLS dello stesso indirizzo (molti fornitori IPTV offrono sia .ts sia .m3u8).
+    static func hlsVariant(of url: URL) async -> URL? {
+        var candidates: [URL] = []
+        if url.absoluteString.lowercased().contains(".m3u8") { return url }
+        let ext = url.pathExtension.lowercased()
+        if !ext.isEmpty { candidates.append(url.deletingPathExtension().appendingPathExtension("m3u8")) }
+        else { candidates.append(url.appendingPathExtension("m3u8")) }
+        for c in candidates {
+            var r = URLRequest(url: c, timeoutInterval: 8)
+            r.setValue("bytes=0-2047", forHTTPHeaderField: "Range")
+            r.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Lumen", forHTTPHeaderField: "User-Agent")
+            guard let (data, response) = try? await URLSession.shared.data(for: r),
+                  let http = response as? HTTPURLResponse, (200..<400).contains(http.statusCode) else { continue }
+            let head = String(decoding: data.prefix(64), as: UTF8.self)
+            if head.contains("#EXTM3U") { return http.url ?? c }
+        }
+        return nil
+    }
+
+    /// Apre la scelta del dispositivo AirPlay (come il pulsante di sistema).
+    static func showRoutePicker(in view: UIView) {
+        let picker = AVRoutePickerView(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
+        picker.alpha = 0.02
+        view.addSubview(picker)
+        for case let b as UIButton in picker.subviews { b.sendActions(for: .touchUpInside) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { picker.removeFromSuperview() }
+    }
 
     @objc private func playPause() {
         if player.isPlaying { player.pause() } else { player.play() }

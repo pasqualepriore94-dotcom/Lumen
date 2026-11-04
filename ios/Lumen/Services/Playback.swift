@@ -54,6 +54,7 @@ enum Playback {
             // Dirette: sempre con VLC (flussi MPEG-TS/HLS dei canali), senza salvare l'avanzamento.
             let now = EPGStore.shared.now(for: media).map { " · \($0.title)" } ?? ""
             let vlc = VLCPlayerViewController(url: media.url, title: media.title + now, startAt: 0)
+            vlc.onAirPlayNative = { hls in presentLiveNative(hls, title: media.title + now) }
             topViewController()?.present(vlc, animated: true)
             return
         }
@@ -70,6 +71,24 @@ enum Playback {
         present(url: media.url, headers: nil, item: item, episodeId: episodeId, episodeLabel: episodeLabel, library: library)
     }
 
+    /// Diretta nel player di iOS (versione HLS), con AirPlay: si apre subito la scelta del dispositivo.
+    private static func presentLiveNative(_ url: URL, title: String) {
+        let item = AVPlayerItem(url: url)
+        item.externalMetadata = metadata(title: title, subtitle: "In diretta")
+        let player = AVPlayer(playerItem: item)
+        player.allowsExternalPlayback = true
+        player.automaticallyWaitsToMinimizeStalling = false
+        let controller = LumenPlayerViewController()
+        controller.player = player
+        controller.modalPresentationStyle = .fullScreen
+        controller.onClose = { [weak player] in player?.pause() }
+        guard let top = topViewController() else { return }
+        top.present(controller, animated: true) {
+            player.play()
+            VLCPlayerViewController.showRoutePicker(in: controller.view)
+        }
+    }
+
     private static func present(url: URL, headers: [String: String]?, item: MediaItem, episodeId: String?,
                                 episodeLabel: String?, library: Library) {
         // MKV, AVI, WebM e altri formati non supportati da iOS → player VLC.
@@ -79,6 +98,9 @@ enum Playback {
             vlc.onProgress = { position, duration in
                 library.update(item: item, episodeId: episodeId, episodeLabel: episodeLabel,
                                position: position, duration: duration)
+            }
+            vlc.onAirPlayNative = { hls in
+                present(url: hls, headers: headers, item: item, episodeId: episodeId, episodeLabel: episodeLabel, library: library)
             }
             topViewController()?.present(vlc, animated: true)
             return
