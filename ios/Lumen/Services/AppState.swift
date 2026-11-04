@@ -58,6 +58,8 @@ final class AppState {
     var selectedTab: AppTab = .home
     /// Toccando un pulsante della barra in basso la schermata torna in cima.
     var scrollTopSignal = 0
+    /// Link di attivazione di un account aperto dall'email (lumen://approve…).
+    var approvalRequest: ApprovalRequest?
     var scrollTopTab: AppTab = .home
 
     func scrollToTop(_ tab: AppTab) {
@@ -194,5 +196,27 @@ final class AppState {
         if let data = try? JSONEncoder().encode(config) {
             UserDefaults.standard.set(data, forKey: Keys.config)
         }
+    }
+}
+
+
+/// Richiesta di attivazione arrivata dal link nell'email dell'amministratore.
+struct ApprovalRequest: Identifiable {
+    var id: String { token + action }
+    var token: String
+    var action: String          // "approve" | "reject"
+    var username: String
+    var email: String
+    var invalid: Bool
+
+    init?(url: URL) {
+        guard url.scheme?.lowercased() == "lumen", url.host?.lowercased() == "approve",
+              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems else { return nil }
+        func value(_ k: String) -> String { items.first { $0.name == k }?.value ?? "" }
+        token = value("token")
+        action = value("action") == "reject" ? "reject" : "approve"
+        username = value("user")
+        email = value("email")
+        invalid = value("invalid") == "1" || token.isEmpty
     }
 }

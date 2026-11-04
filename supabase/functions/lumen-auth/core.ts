@@ -220,7 +220,8 @@ function approvalEmail(u: UserRow, env: Env): string {
     &nbsp;&nbsp;
     <a href="${link("reject")}" style="color:#d33;text-decoration:none">Rifiuta</a>
   </p>
-  <p style="color:#888;font-size:12px">Puoi gestire gli utenti anche dall'app (Profilo → Amministrazione → Utenti) o dal pannello web.</p>
+  <p style="color:#888;font-size:12px">Apri il link dall'iPhone su cui è installata Lumen: si aprirà l'app per confermare.
+  Puoi gestire gli utenti anche da Il mio Lumen → Amministrazione → Utenti.</p>
 </div>`;
 }
 
@@ -268,22 +269,35 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
       });
     }
 
-    // Link nell'email dell'amministratore.
+    // Link nell'email dell'amministratore: apre l'app Lumen (lumen://approve…), dove l'admin conferma.
+    // Il link da solo non cambia nulla: anche i controlli antispam delle email aprono i link.
     if (route === "/approve" && req.method === "GET") {
       const token = url.searchParams.get("token") ?? "";
-      const action = url.searchParams.get("action") ?? "approve";
+      const action = url.searchParams.get("action") === "reject" ? "reject" : "approve";
       const user = token ? await store.findByToken(token) : null;
-      if (!user) return htmlPage("Link non valido", "Questo link è già stato usato oppure non è corretto.", false);
+      const target = `lumen://approve?token=${encodeURIComponent(token)}&action=${action}` +
+        `&user=${encodeURIComponent(user?.username ?? "")}&email=${encodeURIComponent(user?.email ?? "")}` +
+        (user ? "" : "&invalid=1");
+      return new Response(null, { status: 302, headers: { ...CORS, Location: target, "Cache-Control": "no-store" } });
+    }
+
+    // Conferma dall'app (dopo il link): attiva o rifiuta la registrazione.
+    if (route === "/approve" && req.method === "POST") {
+      const b = await readBody(req);
+      const token = String(b.token ?? "");
+      const action = b.action === "reject" ? "reject" : "approve";
+      const user = token ? await store.findByToken(token) : null;
+      if (!user) return fail(400, "Questo link è già stato usato oppure non è corretto.");
       if (action === "reject") {
         await store.remove(user.id);
-        return htmlPage("Richiesta rifiutata", `La registrazione di <b>${escapeHtml(user.username)}</b> è stata eliminata.`, true);
+        return json(200, { status: "rejected", username: user.username });
       }
       await store.update(user.id, { approved: true, approval_token: null, approved_at: new Date().toISOString() });
       if (env.notifyUsers) {
         deps.mailer.send(user.email, `${env.appName}: account attivato`,
           `<p>Ciao ${escapeHtml(user.username)}, il tuo account è stato attivato. Ora puoi accedere all'app.</p>`).catch(() => {});
       }
-      return htmlPage("Account attivato", `<b>${escapeHtml(user.username)}</b> ora può accedere a ${escapeHtml(env.appName)}.`, true);
+      return json(200, { status: "approved", username: user.username });
     }
 
     if (route === "/login" && req.method === "POST") {

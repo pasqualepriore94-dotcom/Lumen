@@ -146,6 +146,10 @@ struct RootView: View {
         .overlay(alignment: .bottom) {
             AchievementToast().padding(.bottom, Theme.tabBarHeight + 12)
         }
+        .onOpenURL { url in
+            if let request = ApprovalRequest(url: url) { app.approvalRequest = request }
+        }
+        .sheet(item: Binding(get: { app.approvalRequest }, set: { app.approvalRequest = $0 })) { ApprovalSheet(request: $0) }
         .onChange(of: library.activitySignature) { AchievementTracker.shared.check(library) }
         .onChange(of: library.myList.map(\.id)) { WatchlistMonitor.shared.sync(list: library.myList, app: app) }
         .playbackHUD()
@@ -231,5 +235,88 @@ struct ProfileAvatar: View {
                     .foregroundStyle(.white)
             }
             .overlay(RoundedRectangle(cornerRadius: size * 0.3, style: .continuous).stroke(.white.opacity(0.35), lineWidth: 0.6))
+    }
+}
+
+
+/// Conferma dell'attivazione (o del rifiuto) di un account, aperta dal link nell'email.
+struct ApprovalSheet: View {
+    @Environment(AppState.self) private var app
+    @Environment(AuthStore.self) private var auth
+    @Environment(\.dismiss) private var dismiss
+    let request: ApprovalRequest
+    @State private var working = false
+    @State private var result: String?
+    @State private var failed = false
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Image(systemName: icon)
+                .font(.system(size: 46, weight: .semibold))
+                .foregroundStyle(failed || request.invalid ? .orange : (request.action == "reject" ? .red : app.accent))
+                .padding(.top, 28)
+            Text(title).font(.title2.bold()).multilineTextAlignment(.center)
+            Text(message).font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+            if result == nil && !request.invalid {
+                Button {
+                    confirm()
+                } label: {
+                    HStack {
+                        if working { ProgressView().tint(.white) }
+                        Text(request.action == "reject" ? "Rifiuta registrazione" : "Attiva account").bold()
+                    }
+                    .frame(maxWidth: .infinity).padding(.vertical, 14)
+                }
+                .buttonStyle(GlassButtonStyle(tint: request.action == "reject" ? .red : app.accent))
+                .foregroundStyle(.white)
+                .disabled(working)
+                .padding(.horizontal, 24)
+            }
+            Button(result == nil && !request.invalid ? "Annulla" : "Chiudi") { dismiss() }
+                .padding(.bottom, 24)
+        }
+        .frame(maxWidth: .infinity)
+        .presentationDetents([.medium])
+        .preferredColorScheme(.dark)
+    }
+
+    private var who: String { request.username.isEmpty ? "questo utente" : request.username }
+
+    private var icon: String {
+        if request.invalid || failed { return "exclamationmark.triangle.fill" }
+        if result != nil { return request.action == "reject" ? "person.fill.xmark" : "checkmark.seal.fill" }
+        return request.action == "reject" ? "person.fill.xmark" : "person.badge.plus"
+    }
+
+    private var title: String {
+        if request.invalid { return "Link non valido" }
+        if let result { return failed ? "Operazione non riuscita" : result }
+        return request.action == "reject" ? "Rifiutare la registrazione?" : "Attivare l'account?"
+    }
+
+    private var message: String {
+        if request.invalid { return "Questo link è già stato usato oppure non è corretto." }
+        if let result, failed { return result + "\nPuoi gestire l'utente anche da Amministrazione → Utenti." }
+        if result != nil { return "" }
+        let mail = request.email.isEmpty ? "" : " (\(request.email))"
+        return request.action == "reject"
+            ? "La registrazione di \(who)\(mail) verrà eliminata."
+            : "\(who)\(mail) potrà accedere a Lumen."
+    }
+
+    private func confirm() {
+        working = true
+        Task {
+            do {
+                let name = try await auth.confirmApproval(token: request.token, reject: request.action == "reject")
+                result = request.action == "reject" ? "Registrazione di \(name) rifiutata" : "\(name) ora può accedere"
+                failed = false
+            } catch {
+                result = error.localizedDescription
+                failed = true
+            }
+            working = false
+        }
     }
 }

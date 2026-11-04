@@ -63,9 +63,17 @@ Deno.test("flusso completo account", async () => {
   assert(r.status === 403, "utente non attivo deve dare 403");
 
   // l'admin clicca il link
-  r = await call(new URL(link).pathname.replace(/^.*\/lumen-auth/, "") + new URL(link).search);
-  assert(r.status === 200 && String(r.body).includes("Account attivato"), "attivazione via link");
-  r = await call(new URL(link).pathname.replace(/^.*\/lumen-auth/, "") + new URL(link).search);
+  // il link apre l'app (redirect a lumen://) senza attivare nulla
+  const res = await handle(new Request(link), deps);
+  const loc = res.headers.get("Location") ?? "";
+  assert(res.status === 302 && loc.startsWith("lumen://approve?") && loc.includes("user=mario.rossi"), "redirect all'app " + loc);
+  const tok = new URL(link).searchParams.get("token")!;
+  r = await call("/login", { json: { username: "mario.rossi", password: "segreta1" } });
+  assert(r.status === 403, "il solo link non attiva");
+  // conferma dall'app
+  r = await call("/approve", { json: { token: tok, action: "approve" } });
+  assert(r.status === 200 && r.body.status === "approved" && r.body.username === "mario.rossi", "attivazione dall'app");
+  r = await call("/approve", { json: { token: tok, action: "approve" } });
   assert(r.status === 400, "link riutilizzato non valido");
 
   // login con email, /me, cambio password
@@ -99,8 +107,8 @@ Deno.test("flusso completo account", async () => {
   sent.length = 0;
   await call("/register", { json: { username: "luigi", email: "luigi@example.com", password: "segreta1" } });
   const reject = sent[0].html.match(/href="([^"]+action=reject)"/)![1].replaceAll("&amp;", "&");
-  r = await call("/approve" + new URL(reject).search);
-  assert(String(r.body).includes("rifiutata"), "rifiuto");
+  r = await call("/approve", { json: { token: new URL(reject).searchParams.get("token"), action: "reject" } });
+  assert(r.status === 200 && r.body.status === "rejected", "rifiuto");
   r = await call("/login", { json: { username: "luigi", password: "segreta1" } });
   assert(r.status === 401, "utente rifiutato non esiste più");
 

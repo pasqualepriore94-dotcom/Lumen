@@ -117,6 +117,15 @@ final class AuthStore {
         return response.message
     }
 
+    private struct ApprovalResponse: Decodable { let status: String; let username: String }
+
+    /// Conferma il link di attivazione ricevuto via email (aperto nell'app). Restituisce lo username.
+    func confirmApproval(token: String, reject: Bool) async throws -> String {
+        guard hasServer else { throw AuthError.noServer }
+        let r: ApprovalResponse = try await request("/approve", body: ["token": token, "action": reject ? "reject" : "approve"])
+        return r.username
+    }
+
     func changePassword(old: String, new: String) async throws {
         guard new.count >= (hasServer ? 6 : 4) else { throw AuthError.server("La nuova password è troppo corta.") }
         if !hasServer {
