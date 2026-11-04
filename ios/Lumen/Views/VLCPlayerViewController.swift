@@ -549,7 +549,7 @@ final class MiniPlayer {
         self.vlc = nil
         vlc.isMinimized = false
         vlc.attachVideo(to: nil)
-        Playback.topViewController()?.present(vlc, animated: true)
+        Playback.presentOnTop(vlc)
     }
 
     /// Chiude il mini player e ferma la riproduzione.

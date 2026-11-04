@@ -55,7 +55,8 @@ enum Playback {
             let now = EPGStore.shared.now(for: media).map { " · \($0.title)" } ?? ""
             let vlc = VLCPlayerViewController(url: media.url, title: media.title + now, startAt: 0)
             vlc.onAirPlayNative = { hls in presentLiveNative(hls, title: media.title + now) }
-            topViewController()?.present(vlc, animated: true)
+            MiniPlayer.shared.close()   // una sola riproduzione alla volta
+            presentOnTop(vlc)
             return
         }
         present(url: media.url, headers: nil, item: media.asItem, episodeId: nil, episodeLabel: nil, library: library)
@@ -83,8 +84,7 @@ enum Playback {
         controller.player = player
         controller.modalPresentationStyle = .fullScreen
         controller.onClose = { [weak player] in player?.pause() }
-        guard let top = topViewController() else { return }
-        top.present(controller, animated: true) {
+        presentOnTop(controller) {
             player.play()
             VLCPlayerViewController.showRoutePicker(in: controller.view)
         }
@@ -103,7 +103,8 @@ enum Playback {
             vlc.onAirPlayNative = { hls in
                 present(url: hls, headers: headers, item: item, episodeId: episodeId, episodeLabel: episodeLabel, library: library)
             }
-            topViewController()?.present(vlc, animated: true)
+            MiniPlayer.shared.close()
+            presentOnTop(vlc)
             return
         }
         var options: [String: Any] = [:]
@@ -148,8 +149,8 @@ enum Playback {
             player?.removeTimeObserver(token)
         }
 
-        guard let top = topViewController() else { return }
-        top.present(controller, animated: true) { player.play() }
+        MiniPlayer.shared.close()
+        presentOnTop(controller) { player.play() }
     }
 
     private static func metadata(title: String, subtitle: String?) -> [AVMetadataItem] {
@@ -174,12 +175,28 @@ enum Playback {
     static func topViewController() -> UIViewController? {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
-        let window = scene?.windows.first { $0.isKeyWindow } ?? scene?.windows.first
+        // Solo la finestra principale dell'app: mai quella (anche nascosta) del mini player.
+        let windows = (scene?.windows ?? []).filter { !$0.isHidden && !($0 is PassthroughWindow) && $0.rootViewController != nil }
+        let window = windows.first { $0.isKeyWindow } ?? windows.first
         var top = window?.rootViewController
         while let presented = top?.presentedViewController, !presented.isBeingDismissed {
             top = presented
         }
         return top
+    }
+
+    /// Presenta un player sopra tutto, riprovando se in quel momento un'altra schermata si sta chiudendo
+    /// (altrimenti iOS ignora la richiesta e "non succede nulla").
+    static func presentOnTop(_ controller: UIViewController, attempt: Int = 0, completion: (() -> Void)? = nil) {
+        guard let top = topViewController() else { return }
+        if top.presentedViewController != nil || top.isBeingDismissed || top.view.window == nil {
+            guard attempt < 8 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                presentOnTop(controller, attempt: attempt + 1, completion: completion)
+            }
+            return
+        }
+        top.present(controller, animated: true, completion: completion)
     }
 }
 
