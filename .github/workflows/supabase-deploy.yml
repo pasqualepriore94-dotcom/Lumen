@@ -44,7 +44,7 @@ jobs:
 
       - name: Crea/aggiorna la tabella utenti
         if: steps.check.outputs.ready == 'true'
-        run: supabase db push -p "$SUPABASE_DB_PASSWORD" --include-all
+        run: supabase db push --linked -p "$SUPABASE_DB_PASSWORD" --include-all
 
       - name: Imposta i segreti della funzione
         if: steps.check.outputs.ready == 'true'
