@@ -357,6 +357,8 @@ final class ImportJob {
 
     private func restore() {
         Task { [weak self] in
+            // Dopo l'animazione di avvio: la ricostruzione dei risultati di playlist enormi è pesante.
+            try? await Task.sleep(for: .seconds(3))
             let loaded = await Task.detached(priority: .userInitiated) { ImportJob.load() }.value
             guard let self else { return }
             if loaded == nil, mapper.cache.isEmpty {

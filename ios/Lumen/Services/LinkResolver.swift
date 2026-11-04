@@ -292,7 +292,11 @@ struct ParsedTitle: Hashable, Codable {
 final class LinkLibrary {
     static let shared = LinkLibrary()
 
-    private(set) var items: [LinkMedia] = []
+    private(set) var items: [LinkMedia] = [] {
+        didSet { liveCount = items.reduce(0) { $0 + ($1.isLive ? 1 : 0) } }
+    }
+    /// Numero di dirette importate (aggiornato a ogni modifica, senza ricalcoli nella home).
+    private(set) var liveCount = 0
     /// id TMDB ("movie-123") → video
     private(set) var movieLinks: [String: LinkMedia] = [:]
     /// id TMDB della serie ("tv-456") → "s1e2" → video

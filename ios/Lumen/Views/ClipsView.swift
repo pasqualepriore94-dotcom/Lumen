@@ -66,7 +66,11 @@ struct ClipsView: View {
                 }
             }
         }
-        .task(id: "\(app.contentKey)|\(links.matchedItems.count)|\(links.items.count)") { await load() }
+        // Il feed si prepara solo quando apri la scheda Clip (non all'avvio dell'app).
+        .task(id: "\(isActive)|\(app.contentKey)|\(links.matchedItems.count)|\(links.items.count)") {
+            guard isActive else { return }
+            await load()
+        }
     }
 
     @Environment(Library.self) private var library

@@ -167,6 +167,9 @@ final class VLCPlayerViewController: UIViewController, VLCMediaPlayerDelegate {
         }
 
         let close = glassButton("xmark", size: 15, action: #selector(closeTapped))
+        // Va aggiunto subito: i vincoli dei pulsanti vicini lo usano come riferimento
+        // (senza, l'app si chiudeva all'apertura del player VLC).
+        controls.addSubview(close)
         let airplay = glassButton("airplayvideo", size: 17, action: #selector(airPlayTapped))
         controls.addSubview(airplay)
         let mini = glassButton("pip.enter", size: 16, action: #selector(minimizeTapped))

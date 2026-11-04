@@ -101,8 +101,8 @@ struct HomeView: View {
                     if app.provider.capabilities.browse {
                         Button("Esplora tutto il catalogo", systemImage: "square.grid.3x3") { app.showCatalog = true }
                     }
-                    if !LinkLibrary.shared.lives.isEmpty {
-                        Button("Dirette (\(LinkLibrary.shared.lives.count))", systemImage: "dot.radiowaves.left.and.right") { showLive = true }
+                    if LinkLibrary.shared.liveCount > 0 {
+                        Button("Dirette (\(LinkLibrary.shared.liveCount))", systemImage: "dot.radiowaves.left.and.right") { showLive = true }
                     }
                     Divider()
                     ForEach(feed?.sections ?? []) { section in

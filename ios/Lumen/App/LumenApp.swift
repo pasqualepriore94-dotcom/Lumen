@@ -49,9 +49,17 @@ struct LumenApp: App {
                     ImportJob.shared.resumeIfNeeded(app: app)
                     // Nuove uscite ed episodi dei titoli in "La mia lista" (al massimo ogni 3 ore).
                     WatchlistMonitor.shared.sync(list: library.myList, app: app)
-                    Task { await WatchlistMonitor.shared.checkIfNeeded() }
-                    // Nuovi contenuti nelle playlist da link → sezione Notifiche.
-                    if auth.isAdmin { Task { await PlaylistStore.shared.checkForUpdates() } }
+                    Task {
+                        try? await Task.sleep(for: .seconds(4))
+                        await WatchlistMonitor.shared.checkIfNeeded()
+                    }
+                    // Nuovi contenuti nelle playlist da link → sezione Notifiche (dopo l'avvio, per non rallentarlo).
+                    if auth.isAdmin {
+                        Task {
+                            try? await Task.sleep(for: .seconds(6))
+                            await PlaylistStore.shared.checkForUpdates()
+                        }
+                    }
                 }
             }
             .preferredColorScheme(.dark)
@@ -142,7 +150,10 @@ struct RootView: View {
         .onChange(of: library.myList.map(\.id)) { WatchlistMonitor.shared.sync(list: library.myList, app: app) }
         .playbackHUD()
         .onAppear {
-            AchievementTracker.shared.check(library, announce: false)
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(3))
+                AchievementTracker.shared.check(library, announce: false)
+            }
             KeyboardDismisser.shared.install()
             AppIconMemory.restoreIfNeeded()
         }
