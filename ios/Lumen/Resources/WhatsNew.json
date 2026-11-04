@@ -1,5 +1,23 @@
 [
   {
+    "version": "0.23.1",
+    "title": "Chiedi a Lumen più preciso",
+    "items": [
+      {
+        "icon": "magnifyingglass",
+        "text": "Se scrivi direttamente il titolo, Chiedi a Lumen lo trova subito nel catalogo e lo mette in cima."
+      },
+      {
+        "icon": "sparkles",
+        "text": "Apple Intelligence propone ora 10 titoli, con risposte più precise."
+      },
+      {
+        "icon": "play.rectangle.on.rectangle",
+        "text": "Nuova sezione \"Nella tua playlist\": i contenuti disponibili che contengono le parole della tua richiesta nel titolo o nella trama."
+      }
+    ]
+  },
+  {
     "version": "0.23.0",
     "title": "Chiedi a Lumen",
     "items": [

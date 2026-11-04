@@ -76,7 +76,7 @@ struct AssistantView: View {
                 .frame(width: 48, height: 48)
                 .liquidGlass(in: Circle(), tint: app.accent.opacity(0.35))
             VStack(alignment: .leading, spacing: 2) {
-                Text("Descrivi cosa ti va di vedere").font(.headline)
+                Text("Scrivi un titolo o descrivi cosa ti va di vedere").font(.headline)
                 Text("Apple Intelligence, sul tuo iPhone: le richieste non lasciano il telefono.")
                     .font(.caption).foregroundStyle(Theme.secondaryText)
             }
@@ -127,17 +127,35 @@ struct AssistantView: View {
 
     private var results: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if !assistant.intro.isEmpty {
-                Text(assistant.intro).font(.body)
+            if !assistant.titleMatches.isEmpty {
+                section("Titoli trovati", icon: "magnifyingglass", assistant.titleMatches)
             }
-            ForEach(assistant.picks) { pick in
-                Button { if let item = pick.item { focused = false; selected = item } } label: { row(pick) }
-                    .buttonStyle(.plain)
-                    .disabled(pick.item == nil)
+            if !assistant.picks.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Label("Suggeriti da Apple Intelligence", systemImage: "sparkles").font(.headline).padding(.top, 6)
+                    if !assistant.intro.isEmpty { Text(assistant.intro).font(.subheadline).foregroundStyle(Theme.secondaryText) }
+                    ForEach(assistant.picks) { pickButton($0) }
+                }
+            }
+            if !assistant.playlistMatches.isEmpty {
+                section("Nella tua playlist", icon: "play.rectangle.on.rectangle", assistant.playlistMatches)
             }
             Text("I suggerimenti sono generati dall'intelligenza artificiale e possono contenere imprecisioni.")
                 .font(.caption2).foregroundStyle(Theme.secondaryText).padding(.top, 4)
         }
+    }
+
+    private func section(_ title: String, icon: String, _ items: [LumenAssistant.Pick]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(title, systemImage: icon).font(.headline).padding(.top, 6)
+            ForEach(items) { pickButton($0) }
+        }
+    }
+
+    private func pickButton(_ pick: LumenAssistant.Pick) -> some View {
+        Button { if let item = pick.item { focused = false; selected = item } } label: { row(pick) }
+            .buttonStyle(.plain)
+            .disabled(pick.item == nil)
     }
 
     private func row(_ pick: LumenAssistant.Pick) -> some View {
@@ -155,6 +173,7 @@ struct AssistantView: View {
                 }
                 .font(.caption).foregroundStyle(Theme.secondaryText)
                 Text(pick.reason).font(.subheadline).foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(4)
                     .fixedSize(horizontal: false, vertical: true)
                 if pick.available {
                     Label("Disponibile in Lumen", systemImage: "play.fill")

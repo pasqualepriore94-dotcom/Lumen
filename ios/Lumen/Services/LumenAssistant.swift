@@ -27,7 +27,13 @@ final class LumenAssistant {
     private(set) var state: State = .idle
     private(set) var intro = ""
     private(set) var picks: [Pick] = []
+    /// Titoli il cui nome corrisponde a quanto scritto (ricerca classica, per chi scrive direttamente il titolo).
+    private(set) var titleMatches: [Pick] = []
+    /// Contenuti della tua playlist la cui trama o titolo contiene le parole della richiesta.
+    private(set) var playlistMatches: [Pick] = []
     private(set) var lastQuestion = ""
+
+    var hasResults: Bool { !picks.isEmpty || !titleMatches.isEmpty || !playlistMatches.isEmpty }
 
     /// nil se l'assistente è disponibile, altrimenti il motivo.
     static var unavailableReason: String? {
@@ -59,22 +65,96 @@ final class LumenAssistant {
         lastQuestion = q
         intro = ""
         picks = []
-        if let reason = Self.unavailableReason { state = .failed(reason); return }
+        titleMatches = []
+        playlistMatches = []
         state = .thinking
-        #if canImport(FoundationModels)
-        if #available(iOS 26.0, *) {
-            do {
-                let session = LanguageModelSession(instructions: Self.instructions(library: library))
-                let response = try await session.respond(to: q, generating: AIPicks.self)
-                intro = response.content.intro
-                picks = await resolve(response.content.picks, app: app)
-                state = picks.isEmpty ? .failed("Non ho trovato titoli adatti: prova a descrivere la richiesta in un altro modo.") : .done
-            } catch {
-                state = .failed(Self.describe(error))
-            }
-            return
+        let tmdb = app.config.providers.first { $0.type == .tmdb && $0.isUsable }.map { TMDBProvider(config: $0) }
+
+        // 1) Se hai scritto un titolo: ricerca classica, subito.
+        if let tmdb, let found = try? await tmdb.search(q) {
+            titleMatches = Self.plausibleTitles(found, query: q).prefix(12).map(Self.pick)
         }
-        #endif
+        // 2) Parole della richiesta nella tua playlist (titoli e trame).
+        let taste = library.taste
+        let catalog = Array(LinkLibrary.shared.matchedItems.values)
+        let found = await Task.detached(priority: .userInitiated) { Self.searchPlaylist(q, items: catalog, taste: taste) }.value
+        playlistMatches = found.map(Self.pick).filter { p in !titleMatches.contains { $0.id == p.id } }
+
+        // 3) Apple Intelligence: suggerimenti a partire dalla descrizione.
+        var aiError: String?
+        if let reason = Self.unavailableReason {
+            aiError = reason
+        } else {
+            #if canImport(FoundationModels)
+            if #available(iOS 26.0, *) {
+                do {
+                    let session = LanguageModelSession(instructions: Self.instructions(library: library))
+                    let response = try await session.respond(to: q, generating: AIPicks.self,
+                                                             options: GenerationOptions(temperature: 0.3))
+                    intro = response.content.intro
+                    let known = Set(titleMatches.map(\.id))
+                    picks = await resolve(response.content.picks, app: app).filter { !known.contains($0.id) }
+                } catch {
+                    aiError = Self.describe(error)
+                }
+            }
+            #endif
+        }
+        if hasResults {
+            state = .done
+        } else {
+            state = .failed(aiError ?? "Non ho trovato titoli adatti: prova a descrivere la richiesta in un altro modo.")
+        }
+    }
+
+    // MARK: Ricerca per titolo e nella playlist
+
+    /// Tiene i risultati il cui titolo somiglia davvero a quanto scritto (non le frasi descrittive).
+    private static func plausibleTitles(_ items: [MediaItem], query: String) -> [MediaItem] {
+        let q = norm(query)
+        let qTokens = Set(q.split(separator: " ").map(String.init))
+        guard !qTokens.isEmpty else { return [] }
+        return items.filter { item in
+            let t = norm(item.title)
+            if t == q || t.hasPrefix(q) || q.hasPrefix(t) && t.count > 3 { return true }
+            let tTokens = Set(t.split(separator: " ").map(String.init))
+            let common = Double(qTokens.intersection(tTokens).count)
+            return common / Double(qTokens.count) >= 0.6 && common / Double(max(1, tTokens.count)) >= 0.5
+        }
+    }
+
+    private static func pick(_ item: MediaItem) -> Pick {
+        let links = LinkLibrary.shared
+        let available = links.link(forItem: item.id) != nil || links.episodeCount(seriesId: item.id) > 0
+        return Pick(title: item.title, year: item.year, isSeries: item.isSeries,
+                    reason: item.overview.map { String($0.prefix(140)) + ($0.count > 140 ? "…" : "") } ?? "",
+                    item: item, available: available)
+    }
+
+    nonisolated private static let stopwords: Set<String> = [
+        "il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "di", "del", "della", "dei", "degli", "delle", "da", "dal",
+        "in", "con", "su", "per", "tra", "fra", "che", "e", "o", "a", "al", "alla", "ai", "agli", "alle", "nel", "nella",
+        "film", "serie", "qualcosa", "voglio", "vedere", "guardare", "stasera", "cosa", "dove", "quello", "quella", "come",
+        "the", "of", "and", "molto", "piu", "più", "mi", "va", "tipo", "anni", "anno", "rimasto", "sono", "c", "è", "e'"
+    ]
+
+    /// Contenuti collegati (playlist) con le parole chiave della richiesta nel titolo o nella trama.
+    nonisolated private static func searchPlaylist(_ query: String, items: [MediaItem], taste: TasteProfile) -> [MediaItem] {
+        let words = norm(query).split(separator: " ").map(String.init).filter { $0.count >= 3 && !stopwords.contains($0) }
+        guard !words.isEmpty else { return [] }
+        var scored: [(MediaItem, Double)] = []
+        for item in items {
+            let title = norm(item.title)
+            let text = title + " " + norm(item.overview ?? "") + " " + norm((item.tags ?? []).joined(separator: " "))
+            var score = 0.0
+            for w in words {
+                if title.contains(w) { score += 3 } else if text.contains(w) { score += 1 }
+            }
+            guard score >= Double(min(2, words.count)) else { continue }
+            score += Double(taste.compatibility(item) ?? 50) / 100
+            scored.append((item, score))
+        }
+        return scored.sorted { $0.1 > $1.1 }.prefix(12).map(\.0)
     }
 
     // MARK: Contesto per il modello
@@ -93,7 +173,8 @@ final class LumenAssistant {
             .joined(separator: "; ")
         return """
         Sei l'assistente di Lumen, un'app per guardare film e serie TV. Rispondi sempre in italiano.
-        Proponi da 4 a 8 film o serie TV reali ed esistenti, adatti alla richiesta dell'utente.
+        Proponi 10 film o serie TV reali ed esistenti, adatti alla richiesta dell'utente.
+        Se l'utente scrive il titolo di un film o di una serie, metti per primo proprio quel titolo e poi titoli simili.
         Se l'utente descrive un titolo che non ricorda, metti per primo quello che corrisponde alla descrizione.
         Non inventare titoli. Indica l'anno corretto. Spiega in breve perché ogni titolo è adatto, senza spoiler.
         \(favorites.isEmpty ? "" : "Generi preferiti dell'utente: \(favorites).")
@@ -112,7 +193,7 @@ final class LumenAssistant {
         let tmdb = app.config.providers.first { $0.type == .tmdb && $0.isUsable }.map { TMDBProvider(config: $0) }
         var out: [Pick] = []
         var seen = Set<String>()
-        for p in raw.prefix(8) {
+        for p in raw.prefix(12) {
             var item = byTitle[Self.norm(p.title)]
             if item == nil, let tmdb {
                 item = try? await tmdb.match(title: p.title, year: p.year > 1900 ? p.year : nil, series: p.isSeries)
@@ -130,7 +211,7 @@ final class LumenAssistant {
     }
     #endif
 
-    private static func norm(_ s: String) -> String {
+    nonisolated private static func norm(_ s: String) -> String {
         s.lowercased().folding(options: [.diacriticInsensitive], locale: nil)
             .components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }.joined(separator: " ")
     }
@@ -160,7 +241,7 @@ final class LumenAssistant {
 struct AIPicks {
     @Guide(description: "Una frase breve e cordiale in italiano che introduce i suggerimenti (massimo 20 parole)")
     var intro: String
-    @Guide(description: "Da 4 a 8 film o serie TV reali ed esistenti adatti alla richiesta")
+    @Guide(description: "Esattamente 10 film o serie TV reali ed esistenti adatti alla richiesta", .count(10))
     var picks: [AIPick]
 }
 
