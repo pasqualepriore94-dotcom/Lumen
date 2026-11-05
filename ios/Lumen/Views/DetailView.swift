@@ -16,6 +16,7 @@ struct DetailView: View {
     @State private var watchSummary: WatchedEntry?
     @State private var trailer: TrailerItem?
     @State private var sagaItem: MediaItem?
+    @State private var showManualMatch = false
     @State private var recapText: String?
     @State private var recapLoading = false
     @State private var recapError: String?
@@ -55,6 +56,7 @@ struct DetailView: View {
                     ratings
                     releasesCard
                     recapCard
+                    customMatchCard
                     mainActions
                     if auth.isAdmin && (movieLink != nil || seriesHasLinks) {
                         Button(role: .destructive) {
@@ -240,6 +242,43 @@ struct DetailView: View {
                 }
                 .scrollIndicators(.hidden)
                 .onAppear { proxy.scrollTo(current.id, anchor: .leading) }
+            }
+        }
+    }
+
+    /// Contenuto aggiunto senza scheda: l'amministratore può abbinarlo a una scheda TMDB.
+    @ViewBuilder
+    private var customMatchCard: some View {
+        if current.id.hasPrefix("link-"), auth.isAdmin {
+            Button { showManualMatch = true } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "link.badge.plus").font(.title3).foregroundStyle(app.accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Abbina a una scheda del catalogo").font(.subheadline.weight(.semibold))
+                        Text("Aggiunge trama, cast, voti e trailer da TMDB").font(.caption).foregroundStyle(Theme.secondaryText)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundStyle(Theme.secondaryText)
+                }
+                .foregroundStyle(.white)
+                .padding(14)
+            }
+            .buttonStyle(GlassButtonStyle(shape: AnyShape(RoundedRectangle(cornerRadius: 20, style: .continuous))))
+            .sheet(isPresented: $showManualMatch) {
+                ManualMatchSheet(query: current.title, year: current.year, isSeries: current.isSeries) { picked in
+                    let old = current
+                    if old.isSeries, let eps = links.episodeLinks[old.id] {
+                        links.matchManually(series: eps, to: picked)
+                    } else if let media = links.link(forItem: old.id) {
+                        links.matchManually(movie: media, to: picked)
+                    }
+                    // Riapre la scheda completa del titolo abbinato
+                    dismiss()
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(500))
+                        app.detailItem = picked
+                    }
+                }
             }
         }
     }

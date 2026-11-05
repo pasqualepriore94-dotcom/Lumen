@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.26.1",
+    "title": "Correzioni",
+    "items": [
+      {
+        "icon": "rectangle.topthird.inset.filled",
+        "text": "La barra Serie, Film, Novità e Categorie della Home resta sempre al suo posto tornando dalle altre schermate."
+      },
+      {
+        "icon": "link.badge.plus",
+        "text": "Nella scheda di un contenuto di \"Altri contenuti\" puoi abbinarlo a una scheda del catalogo TMDB."
+      }
+    ]
+  },
+  {
     "version": "0.26.0",
     "title": "Contenuti non abbinati",
     "items": [

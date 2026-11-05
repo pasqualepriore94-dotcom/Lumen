@@ -19,6 +19,10 @@ struct HomeView: View {
     @State private var showCustom = false
 
     var body: some View {
+        // Intestazione fuori dallo ScrollView (prima era un inserto di area sicura: insieme al
+        // "tira per aggiornare" a volte lasciava la barra dei filtri più in basso tornando sulla Home).
+        VStack(spacing: 0) {
+            TabHeader(title: "Home")
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
@@ -54,22 +58,15 @@ struct HomeView: View {
                 .padding(.bottom, Theme.tabBarHeight + 24)
             }
             .scrollIndicators(.hidden)
-            .background(alignment: .top) {
-                LinearGradient(colors: [app.accent.opacity(0.45), app.accent.opacity(0.12), .black],
-                               startPoint: .top, endPoint: .bottom)
-                    .frame(height: 620)
-                    .ignoresSafeArea()
-            }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                TabHeader(title: "Home")
-                    .background {
-                        LinearGradient(colors: [.black.opacity(0.75), .black.opacity(0.35), .clear],
-                                       startPoint: .top, endPoint: .bottom)
-                            .ignoresSafeArea(edges: .top)
-                    }
-            }
             .refreshable { await load() }
             .scrollsToTop(.home, proxy: proxy, anchor: "top")
+        }
+        }
+        .background(alignment: .top) {
+            LinearGradient(colors: [app.accent.opacity(0.45), app.accent.opacity(0.12), .black],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: 680)
+                .ignoresSafeArea()
         }
         .task(id: app.contentKey) { await load() }
         .sheet(isPresented: $showLive) { LiveChannelsView() }
