@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.27.1",
+    "title": "Correzioni",
+    "items": [
+      {
+        "icon": "play.circle",
+        "text": "\"Continua a guardare\" riprende dal punto giusto anche i contenuti della playlist, dopo aver chiuso e riaperto l'app."
+      }
+    ]
+  },
+  {
     "version": "0.27.0",
     "title": "Più contenuti nel catalogo",
     "items": [

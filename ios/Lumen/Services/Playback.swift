@@ -10,6 +10,14 @@ enum Playback {
         app.isPreparingPlayback = true
         defer { app.isPreparingPlayback = false }
 
+        // Contenuti collegati dalla playlist (anche quelli senza scheda): si riproduce il loro video,
+        // riprendendo dall'episodio e dal punto in cui eri rimasto.
+        await LinkLibrary.shared.loadIfNeeded()
+        if let linked = linkedSource(item: item, episode: episode, episodeLabel: episodeLabel, library: library) {
+            playLink(linked.media, as: item, episodeId: linked.episodeId, episodeLabel: linked.label, library: library)
+            return
+        }
+
         do {
             let provider = app.provider
             var episode = episode
@@ -63,6 +71,34 @@ enum Playback {
     }
 
     /// Riproduce un video da link abbinato a un titolo del catalogo (avanzamento salvato sul titolo).
+    /// Video collegato da playlist per un titolo (film) o per l'episodio da riprendere (serie).
+    private static func linkedSource(item: MediaItem, episode: Episode?, episodeLabel: String?,
+                                     library: Library) -> (media: LinkMedia, episodeId: String?, label: String?)? {
+        let links = LinkLibrary.shared
+        if !item.isSeries {
+            return links.link(forItem: item.id).map { ($0, nil, nil) }
+        }
+        func numbers(_ id: String?) -> (Int, Int)? {
+            guard let id, let r = id.range(of: #"s(\d+)e(\d+)$"#, options: .regularExpression) else { return nil }
+            let n = id[r].split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+            return n.count == 2 ? (n[0], n[1]) : nil
+        }
+        // Episodio scelto, altrimenti quello in corso, altrimenti il primo disponibile
+        let resume = library.resumeEntry(for: item.id)
+        let wanted = episode?.id ?? resume?.episodeId
+        if let pair = numbers(wanted), let media = links.link(seriesId: item.id, season: pair.0, episode: pair.1) {
+            let s = pair.0, e = pair.1
+            return (media, wanted, episodeLabel ?? (episode == nil ? resume?.episodeLabel : nil) ?? "S\(s) E\(e)")
+        }
+        guard episode == nil, let eps = links.episodeLinks[item.id], !eps.isEmpty else { return nil }
+        let first = eps.keys.compactMap { k -> (Int, Int, String)? in
+            let n = k.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+            return n.count == 2 ? (n[0], n[1], k) : nil
+        }.min { ($0.0, $0.1) < ($1.0, $1.1) }
+        guard let first, let media = eps[first.2] else { return nil }
+        return (media, "\(item.id)-s\(first.0)e\(first.1)", "S\(first.0) E\(first.1)")
+    }
+
     static func playLink(_ media: LinkMedia, as item: MediaItem, episodeId: String?, episodeLabel: String?,
                          library: Library) {
         if let local = DownloadManager.shared.localFile(itemId: item.id, episodeId: episodeId) {
