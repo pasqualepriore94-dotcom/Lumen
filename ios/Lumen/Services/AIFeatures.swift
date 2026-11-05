@@ -61,7 +61,8 @@ enum AIText {
 @MainActor
 enum WhyRecommend {
     /// Titoli già visti più simili (generi in comune), i più "pesanti" per primi.
-    static func similarSeen(genres: [String], excluding id: String, library: Library) -> [MediaItem] {
+    static func similarSeen(genres: [String], excluding id: String, title: String? = nil, library: Library) -> [MediaItem] {
+        let ownTitle = title.map(norm)
         let wanted = Set(genres)
         guard !wanted.isEmpty else { return [] }
         var seen: [String: (MediaItem, Double)] = [:]
@@ -70,7 +71,8 @@ enum WhyRecommend {
         }
         for w in library.watched.values where seen[w.id] == nil { seen[w.id] = (w.item, 1) }
         return seen.values
-            .filter { $0.0.id != id }
+            // Mai il titolo stesso (anche se visto con un'altra scheda, es. dalla playlist)
+            .filter { $0.0.id != id && (ownTitle == nil || norm($0.0.title) != ownTitle) }
             .map { pair -> (MediaItem, Double) in
                 let common = Set(pair.0.tags ?? []).intersection(wanted).count
                 return (pair.0, Double(common) * 2 + pair.1)
@@ -91,10 +93,10 @@ enum WhyRecommend {
         return who + what + "."
     }
 
-    static func cached(_ id: String, signature: Int) -> String? { AITextCache.get("why|\(id)|\(signature)") }
+    static func cached(_ id: String, signature: Int) -> String? { AITextCache.get("why2|\(id)|\(signature)") }
 
     static func generate(item: MediaItem, overview: String?, genres: [String], similar: [MediaItem], signature: Int) async -> String? {
-        let key = "why|\(item.id)|\(signature)"
+        let key = "why2|\(item.id)|\(signature)"
         if let c = AITextCache.get(key) { return c }
         guard !similar.isEmpty else { return nil }
         let seenText = similar.map { s in
@@ -108,13 +110,20 @@ enum WhyRecommend {
         let out = await AIText.respond(instructions: """
         Sei l'assistente di Lumen. Scrivi UNA sola frase in italiano, massimo 22 parole, che spiega perché il titolo
         consigliato piacerà all'utente. Inizia con "Ti è piaciuto" o "Ti sono piaciuti" seguito da uno o due titoli visti,
-        poi i due punti e cosa hanno in comune (atmosfera, temi, tipo di protagonisti). Usa solo le informazioni fornite,
+        poi i due punti e cosa hanno in comune (atmosfera, temi, tipo di protagonisti). Cita solo titoli dell'elenco dei visti,
+        mai il titolo consigliato. Usa solo le informazioni fornite,
         niente spoiler, niente virgolette.
         """, prompt: prompt, temperature: 0.4)
-        guard let out, out.count < 260 else { return nil }
+        // La frase non deve citare il titolo consigliato come "già visto"
+        guard let out, out.count < 260, !norm(out).contains(norm(item.title)) || norm(item.title).count < 4 else { return nil }
         AITextCache.set(key, out)
         return out
     }
+}
+
+private func norm(_ s: String) -> String {
+    s.lowercased().folding(options: [.diacriticInsensitive], locale: nil)
+        .components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }.joined(separator: " ")
 }
 
 // MARK: - 6. Trame più brevi e tradotte

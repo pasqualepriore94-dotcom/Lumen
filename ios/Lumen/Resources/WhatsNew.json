@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.32.2",
+    "title": "Schede più pulite",
+    "items": [
+      {
+        "icon": "rectangle.on.rectangle",
+        "text": "Nella scheda di un titolo l'immagine in alto non sborda più sotto il titolo e il testo."
+      },
+      {
+        "icon": "sparkles",
+        "text": "«Perché te lo consiglio» non cita più il titolo stesso tra quelli che ti sono piaciuti."
+      }
+    ]
+  },
+  {
     "version": "0.32.1",
     "title": "Siri",
     "items": [

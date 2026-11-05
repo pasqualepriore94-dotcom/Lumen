@@ -173,6 +173,8 @@ struct DetailView: View {
                         .allowsHitTesting(false)
                 }
             }
+            // Locandina e video riempiono l'anteprima ma non devono uscirne (finivano sotto al testo)
+            .clipped()
             .overlay(LinearGradient(stops: [.init(color: .black.opacity(0.45), location: 0), .init(color: .clear, location: 0.22),
                                             .init(color: .clear, location: 0.5), .init(color: .black.opacity(hasTrailer ? 1 : 0.7), location: 1)],
                                     startPoint: .top, endPoint: .bottom)
@@ -418,7 +420,7 @@ struct DetailView: View {
         let genres = detail.genres.isEmpty ? (detail.item.tags ?? []) : detail.genres
         if library.taste.compatibility(detail.item, genres: genres) != nil {
             let sig = library.activitySignature
-            let similar = WhyRecommend.similarSeen(genres: genres, excluding: detail.item.id, library: library)
+            let similar = WhyRecommend.similarSeen(genres: genres, excluding: detail.item.id, title: detail.item.title, library: library)
             whyText = WhyRecommend.cached(detail.item.id, signature: sig) ?? WhyRecommend.fallback(similar: similar, genres: genres)
             if let ai = await WhyRecommend.generate(item: detail.item, overview: detail.item.overview, genres: genres,
                                                     similar: similar, signature: sig) {
