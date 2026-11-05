@@ -222,6 +222,9 @@ final class ImportJob {
         selMovies = Set(mapper.movies.filter { $0.match != nil }.map(\.id))
         selSeries = Set(mapper.series.filter { $0.match != nil }.map(\.id))
         unseen = true
+        mapper.removeImported(LinkLibrary.shared.allLinkedIds)   // già nel catalogo: non riproporli
+        selMovies.formIntersection(Set(mapper.movies.map(\.id)))
+        selSeries.formIntersection(Set(mapper.series.map(\.id)))
         persist(force: true)
         BackgroundRunner.shared.end(success: true)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
@@ -309,6 +312,27 @@ final class ImportJob {
     nonisolated private static var inputFile: URL { folder.appendingPathComponent("import-input.json") }
     nonisolated private static var cacheFile: URL { folder.appendingPathComponent("import-cache.json") }
 
+    /// Risultati visti: il banner "Analisi completata" non ricompare alle prossime aperture.
+    func markSeen() {
+        guard unseen else { return }
+        unseen = false
+        persist()
+    }
+
+    /// Toglie dai risultati ciò che è già nel catalogo; se non resta nulla da scegliere chiude i risultati.
+    func pruneImported() {
+        guard phase == .ready else { return }
+        mapper.removeImported(LinkLibrary.shared.allLinkedIds)
+        selMovies.formIntersection(Set(mapper.movies.map(\.id)))
+        selSeries.formIntersection(Set(mapper.series.map(\.id)))
+        selLives.formIntersection(Set(mapper.lives.map(\.id)))
+        if mapper.movies.isEmpty && mapper.series.isEmpty && mapper.lives.isEmpty {
+            clear()
+        } else {
+            persist()
+        }
+    }
+
     private func persist(force: Bool = false) {
         let state = State(phase: phase, sourceName: sourceName, linkText: linkText, selMovies: selMovies,
                           selSeries: selSeries, unseen: unseen, tmdbConfig: tmdbConfig)
@@ -379,7 +403,11 @@ final class ImportJob {
                 tmdbConfig = s.tmdbConfig
                 if loaded.legacy { saveInput(); persist(force: true) }
                 if phase == .mapping && input.isEmpty { phase = .idle }
-                if phase == .ready { await mapper.rebuild(input) }
+                if phase == .ready {
+                    await mapper.rebuild(input)
+                    await LinkLibrary.shared.loadIfNeeded()
+                    pruneImported()   // ciò che hai già importato non viene riproposto
+                }
                 // Un lavoro rimasto a metà riprende da solo.
                 paused = isRunning
             }
@@ -521,7 +549,7 @@ struct ImportJobBanner: View {
                 }
                 Spacer(minLength: 4)
                 Button {
-                    job.unseen = false
+                    job.markSeen()
                     app.showAdmin = true
                     Task { @MainActor in
                         try? await Task.sleep(for: .milliseconds(450))
@@ -531,7 +559,7 @@ struct ImportJobBanner: View {
                     Text("Scegli").font(.footnote.weight(.bold)).padding(.horizontal, 14).padding(.vertical, 8)
                 }
                 .buttonStyle(GlassButtonStyle(tint: app.accent))
-                Button { withAnimation { job.unseen = false } } label: {
+                Button { withAnimation { job.markSeen() } } label: {
                     Image(systemName: "xmark").font(.caption.bold()).frame(width: 28, height: 28)
                 }
                 .buttonStyle(GlassButtonStyle(shape: AnyShape(Circle())))

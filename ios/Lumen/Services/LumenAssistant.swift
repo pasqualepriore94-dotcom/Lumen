@@ -98,9 +98,13 @@ final class LumenAssistant {
         let aiTask: Task<(String, [Pick])?, Error>? = aiAvailable ? Task { @MainActor in try await self.generate(q, app: app, library: library) } : nil
 
         // 1) Titolo scritto direttamente: ricerca classica.
+        // Contenuti aggiunti senza scheda (Altri film, Altre serie, Corsi): ricercabili per titolo
+        let local = LinkLibrary.shared.customItems.filter { $0.title.localizedCaseInsensitiveContains(q) }.prefix(12).map(Self.pick)
         if let tmdb, let found = try? await tmdb.search(q) {
             guard rid == requestId else { aiTask?.cancel(); return }
-            titleMatches = Self.plausibleTitles(found, query: q).prefix(12).map(Self.pick)
+            titleMatches = Array(local) + Self.plausibleTitles(found, query: q).prefix(12).map(Self.pick)
+        } else {
+            titleMatches = Array(local)
         }
         // 2) Parole della richiesta nella tua playlist (titoli e trame).
         let taste = library.taste

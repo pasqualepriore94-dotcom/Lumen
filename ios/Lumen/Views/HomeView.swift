@@ -44,6 +44,20 @@ struct HomeView: View {
                                 PosterRow(items: library.myList, layout: .poster)
                             }
                         }
+                        // Contenuti della playlist senza scheda TMDB: nelle categorie principali
+                        let custom = LinkLibrary.shared
+                        if activeFilter == nil || activeFilter == .movies, !custom.otherMovies.isEmpty {
+                            SectionRow(section: CatalogSection(id: "other-movies", title: "Altri film", style: nil, items: custom.otherMovies))
+                                .id("other-movies")
+                        }
+                        if activeFilter == nil || activeFilter == .series, !custom.otherSeries.isEmpty {
+                            SectionRow(section: CatalogSection(id: "other-series", title: "Altre serie", style: nil, items: custom.otherSeries))
+                                .id("other-series")
+                        }
+                        if activeFilter == nil, !custom.courseItems.isEmpty {
+                            SectionRow(section: CatalogSection(id: "courses", title: "Corsi", style: nil, items: custom.courseItems))
+                                .id("courses")
+                        }
                         ForEach(filteredSections(feed)) { section in
                             SectionRow(section: section).id(section.id)
                         }
@@ -111,7 +125,12 @@ struct HomeView: View {
                     if app.provider.capabilities.browse {
                         Button("Esplora tutto il catalogo", systemImage: "square.grid.3x3") { app.showCatalog = true }
                     }
-                    if LinkLibrary.shared.matchedItems.keys.contains(where: { $0.hasPrefix("link-") }) {
+                    if !LinkLibrary.shared.courseItems.isEmpty {
+                        Button("Corsi (\(LinkLibrary.shared.courseItems.count))", systemImage: "graduationcap") {
+                            withAnimation { proxy.scrollTo("courses", anchor: .top) }
+                        }
+                    }
+                    if !LinkLibrary.shared.customItems.isEmpty {
                         Button("Altri contenuti", systemImage: "square.stack") { showCustom = true }
                     }
                     if LinkLibrary.shared.liveCount > 0 {

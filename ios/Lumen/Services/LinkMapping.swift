@@ -58,6 +58,13 @@ final class LinkMapper {
 
     func cancel() { cancelled = true; generation += 1; isMapping = false }
 
+    /// Toglie dai risultati ciò che è già stato importato (così non viene riproposto).
+    func removeImported(_ linked: Set<String>) {
+        movies.removeAll { linked.contains($0.media.id) }
+        series.removeAll { $0.episodes.values.allSatisfy { linked.contains($0.id) } }
+        lives.removeAll { linked.contains($0.id) }
+    }
+
     /// Ricerche simultanee sul catalogo (TMDB accetta circa 40 richieste al secondo).
     static let parallelism = 8
 
@@ -181,6 +188,9 @@ final class LinkMapper {
         // Titoli rimasti senza scheda: Apple Intelligence ne ricava il nome pulito e si riprova.
         await aiRescue(grouped, tmdb: tmdb, gen: gen)
         guard gen == generation, !cancelled else { return }
+        // Ancora senza scheda: confronto delle locandine
+        await posterRescue(grouped, tmdb: tmdb, gen: gen)
+        guard gen == generation, !cancelled else { return }
         phaseLabel = nil
         apply(grouped)
         isMapping = false
@@ -201,5 +211,6 @@ extension LinkLibrary {
             if let item = s.match { seriesLinks.append((s.episodes, item)) } else { unmatched.append(contentsOf: s.episodes.values) }
         }
         applyBatch(movies: movieLinks, series: seriesLinks, unmatched: unmatched)
+        autoAddCourses()
     }
 }

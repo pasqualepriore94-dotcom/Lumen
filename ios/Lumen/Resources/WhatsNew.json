@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.27.0",
+    "title": "Più contenuti nel catalogo",
+    "items": [
+      {
+        "icon": "square.stack",
+        "text": "I contenuti senza scheda compaiono in Home nelle righe \"Altri film\" e \"Altre serie\" e si trovano anche con la ricerca."
+      },
+      {
+        "icon": "photo.on.rectangle.angled",
+        "text": "Abbinamento per locandina: se il titolo non basta, Lumen confronta la locandina della playlist con quelle del catalogo."
+      },
+      {
+        "icon": "graduationcap",
+        "text": "Nuova categoria \"Corsi\": corsi, lezioni e tutorial della playlist vengono raccolti qui, con le lezioni in ordine."
+      },
+      {
+        "icon": "checkmark.circle",
+        "text": "I contenuti già importati non vengono più riproposti ogni volta che apri l'app."
+      }
+    ]
+  },
+  {
     "version": "0.26.1",
     "title": "Correzioni",
     "items": [

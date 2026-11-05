@@ -55,6 +55,45 @@ extension LinkMapper {
         #endif
     }
 
+    /// Titoli ancora senza scheda: abbinamento per locandina (massimo 400 per analisi, una volta sola per titolo).
+    func posterRescue(_ grouped: Grouped, tmdb: TMDBProvider, gen: Int) async {
+        var todo: [(key: String, title: String, poster: URL, series: Bool)] = []
+        var seen = Set<String>()
+        for s in grouped.series {
+            let k = Self.key(series: s)
+            guard let poster = s.poster, cache[k] != nil, cache[k]?.item == nil, cache["px|" + k] == nil, seen.insert(k).inserted else { continue }
+            todo.append((k, s.name, poster, true))
+        }
+        for m in grouped.movies {
+            let k = Self.key(movie: m.parsed)
+            guard let poster = m.media.poster, cache[k] != nil, cache[k]?.item == nil, cache["px|" + k] == nil, seen.insert(k).inserted else { continue }
+            todo.append((k, m.parsed.title, poster, false))
+        }
+        guard !todo.isEmpty else { return }
+        todo = Array(todo.prefix(400))
+        total += todo.count
+        phaseLabel = "Confronto delle locandine"
+        onProgress?()
+        var next = todo.makeIterator()
+        await withTaskGroup(of: (String, MediaItem?).self) { group in
+            for _ in 0..<4 {
+                guard let t = next.next() else { break }
+                group.addTask { (t.key, await PosterMatcher.match(title: t.title, isSeries: t.series, poster: t.poster, tmdb: tmdb)) }
+            }
+            while let r = await group.next() {
+                if cancelled || gen != generation { group.cancelAll(); return }
+                let key = r.0
+                if let item = r.1 { cache[key] = CachedMatch(item: item) }
+                cache["px|" + key] = CachedMatch(item: nil)
+                done += 1
+                if done % 10 == 0 { onProgress?() }
+                if let t = next.next() {
+                    group.addTask { (t.key, await PosterMatcher.match(title: t.title, isSeries: t.series, poster: t.poster, tmdb: tmdb)) }
+                }
+            }
+        }
+    }
+
     #if canImport(FoundationModels)
     @available(iOS 26.0, *)
     private static func clean(_ names: [(String, Bool)]) async -> [Int: CleanTitle] {

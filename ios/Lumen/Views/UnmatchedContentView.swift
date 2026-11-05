@@ -16,6 +16,7 @@ struct UnmatchedContentView: View {
     @State private var selection = Set<String>()
     @State private var message: String?
     @State private var matching: MatchTarget?
+    @State private var posterRun: (done: Int, total: Int, found: Int)?
 
     struct MatchTarget: Identifiable {
         var id: String
@@ -53,6 +54,29 @@ struct UnmatchedContentView: View {
                 .pickerStyle(.segmented)
                 TextField("Cerca", text: $search).textInputAutocapitalization(.never).autocorrectionDisabled()
                 if let message { Text(message).font(.footnote).foregroundStyle(.secondary) }
+                if tab != .lives {
+                    if let run = posterRun {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ProgressView(value: Double(run.done), total: Double(max(run.total, 1)))
+                            Text("Confronto locandine \(run.done)/\(run.total) · abbinati \(run.found)").font(.caption).foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Button {
+                            Task { await matchByPoster() }
+                        } label: {
+                            Label(selection.isEmpty ? "Abbina con le locandine (tutti i mostrati)" : "Abbina con le locandine (\(selection.count) selezionati)",
+                                  systemImage: "photo.on.rectangle.angled")
+                        }
+                        let others = links.customItems.filter { !LinkLibrary.isCourseItem($0) }
+                        if !others.isEmpty {
+                            Button {
+                                Task { await matchCustomByPoster(others) }
+                            } label: {
+                                Label("Abbina \"Altri contenuti\" con le locandine (\(others.count))", systemImage: "square.stack")
+                            }
+                        }
+                    }
+                }
             } footer: {
                 Text(footer)
             }
@@ -213,6 +237,83 @@ struct UnmatchedContentView: View {
             message = "\(list.count) dirette aggiunte (Categorie → Dirette)."
         }
         selection = []
+    }
+
+    // MARK: Abbinamento per locandina
+
+    private var tmdb: TMDBProvider? {
+        app.config.providers.first { $0.type == .tmdb && $0.isUsable }.map { TMDBProvider(config: $0) }
+    }
+
+    /// Confronta le locandine della playlist con quelle del catalogo (selezionati o tutti i mostrati, fino a 300).
+    private func matchByPoster() async {
+        guard let tmdb else { message = "Serve la sorgente TMDB attiva."; return }
+        var jobs: [(id: String, title: String, poster: URL, series: Bool)] = []
+        if tab == .movies {
+            let pool = selection.isEmpty ? shownMovies : movies.filter { selection.contains($0.id) }
+            jobs = pool.compactMap { m in m.media.poster.map { (m.id, m.parsed.title, $0, false) } }
+        } else {
+            let pool = selection.isEmpty ? shownSeries : series.filter { selection.contains($0.id) }
+            jobs = pool.compactMap { s in s.poster.map { (s.id, s.name, $0, true) } }
+        }
+        jobs = Array(jobs.prefix(300))
+        guard !jobs.isEmpty else { message = "Nessun contenuto con locandina da confrontare."; return }
+        posterRun = (0, jobs.count, 0)
+        for chunk in stride(from: 0, to: jobs.count, by: 4).map({ Array(jobs[$0..<min($0 + 4, jobs.count)]) }) {
+            let results = await withTaskGroup(of: (String, MediaItem?).self) { group -> [(String, MediaItem?)] in
+                for j in chunk { group.addTask { (j.id, await PosterMatcher.match(title: j.title, isSeries: j.series, poster: j.poster, tmdb: tmdb)) } }
+                var out: [(String, MediaItem?)] = []
+                for await r in group { out.append(r) }
+                return out
+            }
+            var found = 0
+            for (id, item) in results {
+                guard let item else { continue }
+                if let m = movies.first(where: { $0.id == id }) {
+                    links.matchManually(movie: m.media, to: item)
+                    movies.removeAll { $0.id == id }
+                    found += 1
+                } else if let s = series.first(where: { $0.id == id }) {
+                    links.matchManually(series: s.episodes, to: item)
+                    series.removeAll { $0.id == id }
+                    found += 1
+                }
+            }
+            posterRun = (posterRun!.done + chunk.count, jobs.count, posterRun!.found + found)
+        }
+        message = "Confronto delle locandine: \(posterRun!.found) abbinati su \(jobs.count)."
+        posterRun = nil
+        selection = []
+    }
+
+    /// Stesso confronto per i contenuti già aggiunti senza scheda ("Altri contenuti").
+    private func matchCustomByPoster(_ items: [MediaItem]) async {
+        guard let tmdb else { message = "Serve la sorgente TMDB attiva."; return }
+        let jobs = Array(items.filter { $0.poster != nil }.prefix(300))
+        guard !jobs.isEmpty else { message = "Nessun contenuto con locandina da confrontare."; return }
+        posterRun = (0, jobs.count, 0)
+        for chunk in stride(from: 0, to: jobs.count, by: 4).map({ Array(jobs[$0..<min($0 + 4, jobs.count)]) }) {
+            let results = await withTaskGroup(of: (MediaItem, MediaItem?).self) { group -> [(MediaItem, MediaItem?)] in
+                for c in chunk {
+                    group.addTask { (c, await PosterMatcher.match(title: c.title, isSeries: c.isSeries, poster: c.poster, tmdb: tmdb)) }
+                }
+                var out: [(MediaItem, MediaItem?)] = []
+                for await r in group { out.append(r) }
+                return out
+            }
+            var found = 0
+            for (custom, item) in results {
+                guard let item else { continue }
+                if custom.isSeries, let eps = links.episodeLinks[custom.id] {
+                    links.matchManually(series: eps, to: item); found += 1
+                } else if let media = links.link(forItem: custom.id) {
+                    links.matchManually(movie: media, to: item); found += 1
+                }
+            }
+            posterRun = (posterRun!.done + chunk.count, jobs.count, posterRun!.found + found)
+        }
+        message = "Altri contenuti: \(posterRun!.found) abbinati al catalogo su \(jobs.count)."
+        posterRun = nil
     }
 
     private func load() async {

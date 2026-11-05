@@ -74,8 +74,8 @@ struct LinkImportView: View {
         .onAppear {
             if input.isEmpty, let s = UIPasteboard.general.string, s.lowercased().hasPrefix("http") { input = s }
         }
-        .onAppear { if job.phase == .ready { job.unseen = false } }
-        .onChange(of: job.phase) { if job.phase == .ready { job.unseen = false; tab = 0 } }
+        .onAppear { if job.phase == .ready { job.markSeen(); job.pruneImported() } }
+        .onChange(of: job.phase) { if job.phase == .ready { job.markSeen(); tab = 0 } }
         .fileImporter(isPresented: $pickingFile, allowedContentTypes: Self.playlistTypes, allowsMultipleSelection: false) { result in
             loadFile(result)
         }
@@ -403,6 +403,7 @@ struct LinkImportView: View {
             + (lives.isEmpty ? "" : "\(lives.count) dirette aggiunte alla categoria Dirette. ")
             + "I non trovati (\(movies.count - mFound + series.count - sFound)) sono nell'elenco del pannello."
         job.selLives.subtract(lives.map(\.id))
+        job.pruneImported()
         job.selMovies.subtract(movies.map(\.id))
         job.selSeries.subtract(series.map(\.id))
         UINotificationFeedbackGenerator().notificationOccurred(.success)

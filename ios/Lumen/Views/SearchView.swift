@@ -229,7 +229,8 @@ struct SearchView: View {
         defer { searching = false }
         do {
             try await Task.sleep(for: .milliseconds(300))
-            results = try await app.provider.search(q)
+            let local = LinkLibrary.shared.customItems.filter { $0.title.localizedCaseInsensitiveContains(q) }
+            results = local + (try await app.provider.search(q))
             errorMessage = nil
         } catch is CancellationError {
         } catch {

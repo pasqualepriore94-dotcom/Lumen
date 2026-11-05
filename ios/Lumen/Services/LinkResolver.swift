@@ -360,6 +360,7 @@ final class LinkLibrary {
             matchedItems = m.items.merging(matchedItems) { _, new in new }
         }
         isLoaded = true
+        autoAddCourses()
     }
 
     nonisolated private static var matchesFile: URL {
@@ -541,11 +542,12 @@ final class LinkLibrary {
         }
     }
 
-    func addCustomSeries(_ list: [(name: String, year: Int?, poster: URL?, episodes: [String: LinkMedia])]) {
+    func addCustomSeries(_ list: [(name: String, year: Int?, poster: URL?, episodes: [String: LinkMedia])], overview: String? = nil) {
         removeLinks(Set(list.flatMap { $0.episodes.values.map(\.id) }))
         for s in list {
+            let text = overview.map { "\($0) · \(s.episodes.count) lezioni" } ?? "Aggiunta dalla playlist"
             let item = MediaItem(id: Self.customId(s.name, series: true), title: s.name, kind: .series,
-                                 poster: s.poster, backdrop: s.poster, overview: "Aggiunta dalla playlist", year: s.year)
+                                 poster: s.poster, backdrop: s.poster, overview: text, year: s.year)
             setEpisodeLinks(s.episodes, for: item)
         }
     }
@@ -561,9 +563,61 @@ final class LinkLibrary {
         setEpisodeLinks(episodes, for: item)
     }
 
-    /// Contenuti aggiunti senza scheda (categoria "Altri contenuti").
+    @ObservationIgnored private var customCache: (version: Int, items: [MediaItem]) = (-1, [])
+
+    /// Contenuti aggiunti senza scheda TMDB (calcolati una volta per versione degli abbinamenti).
     var customItems: [MediaItem] {
-        matchedItems.values.filter { $0.id.hasPrefix("link-") }.sorted { $0.title.localizedCompare($1.title) == .orderedAscending }
+        _ = matchedItems.count   // osservazione: la vista si aggiorna quando cambiano
+        if customCache.version != matchesVersion {
+            customCache = (matchesVersion, matchedItems.values.filter { $0.id.hasPrefix("link-") }
+                .sorted { $0.title.localizedCompare($1.title) == .orderedAscending })
+        }
+        return customCache.items
+    }
+
+    /// Categoria "Corsi": contenuti formativi aggiunti dalla playlist.
+    var courseItems: [MediaItem] { customItems.filter { Self.isCourseItem($0) } }
+    /// "Altri film" / "Altre serie": contenuti senza scheda che non sono corsi.
+    var otherMovies: [MediaItem] { customItems.filter { !$0.isSeries && !Self.isCourseItem($0) } }
+    var otherSeries: [MediaItem] { customItems.filter { $0.isSeries && !Self.isCourseItem($0) } }
+
+    nonisolated static let courseWords = ["corso", "corsi", "course", "lezione", "lezioni", "lesson", "tutorial",
+                                          "masterclass", "formazione", "webinar", "udemy", "videocorso"]
+
+    nonisolated static func isCourse(_ text: String) -> Bool {
+        let t = " " + text.lowercased() + " "
+        return courseWords.contains { t.contains($0) }
+    }
+
+    static func isCourseItem(_ item: MediaItem) -> Bool {
+        (item.overview ?? "").hasPrefix("Corso") || isCourse(item.title)
+    }
+
+    /// Indirizzi di tutti i contenuti già importati (catalogo, episodi, dirette, non abbinati).
+    var allLinkedIds: Set<String> {
+        var ids = Set(items.map(\.id))
+        for m in movieLinks.values { ids.insert(m.id) }
+        for eps in episodeLinks.values { for m in eps.values { ids.insert(m.id) } }
+        return ids
+    }
+
+    /// Le voci formative non abbinate (corsi, lezioni, tutorial) diventano corsi nella categoria "Corsi":
+    /// un corso per gruppo della playlist, con le lezioni in ordine.
+    func autoAddCourses() {
+        let candidates = items.filter { !$0.isLive && Self.isCourse($0.title + " " + ($0.group ?? "")) }
+        guard !candidates.isEmpty else { return }
+        let groups = Dictionary(grouping: candidates) { m -> String in
+            let g = (m.group ?? "").trimmingCharacters(in: .whitespaces)
+            return g.isEmpty ? ParsedTitle.parse(m.title).title : g
+        }
+        var list: [(name: String, year: Int?, poster: URL?, episodes: [String: LinkMedia])] = []
+        for (name, lessons) in groups {
+            let sorted = lessons.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+            var eps: [String: LinkMedia] = [:]
+            for (i, m) in sorted.enumerated() { eps["s1e\(i + 1)"] = m }
+            list.append((name: name, year: nil, poster: sorted.first { $0.poster != nil }?.poster, episodes: eps))
+        }
+        addCustomSeries(list, overview: "Corso")
     }
 
     /// Scheda costruita in locale per un contenuto senza scheda TMDB (stagioni dagli episodi collegati).
@@ -576,7 +630,7 @@ final class LinkLibrary {
             let nums = key.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
             guard nums.count == 2 else { continue }
             bySeason[nums[0], default: []].append(Episode(id: "\(item.id)-s\(nums[0])e\(nums[1])", number: nums[1],
-                                                          title: "Episodio \(nums[1])", overview: media.title))
+                                                          title: media.title))
         }
         let seasons = bySeason.keys.sorted().map { n in
             Season(id: "\(item.id)-s\(n)", number: n, title: "Stagione \(n)",
@@ -666,7 +720,11 @@ final class LinkLibrary {
         }
     }
 
+    /// Cambia a ogni modifica degli abbinamenti (per le liste calcolate, es. Altri contenuti).
+    @ObservationIgnored private(set) var matchesVersion = 0
+
     private func saveMatches() {
+        matchesVersion += 1
         saveMatchesTask?.cancel()
         saveMatchesTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
