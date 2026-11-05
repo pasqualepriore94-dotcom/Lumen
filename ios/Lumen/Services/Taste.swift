@@ -58,7 +58,13 @@ struct TasteProfile {
 }
 
 extension Library {
-    var taste: TasteProfile { TasteProfile.build(self) }
+    var taste: TasteProfile {
+        let sig = activitySignature
+        if let c = tasteCache, c.signature == sig { return c.profile }
+        let p = TasteProfile.build(self)
+        tasteCache = (sig, p)
+        return p
+    }
 
     /// Cambia quando si segna qualcosa come visto o si modifica la lista: serve per controllare i trofei.
     var activitySignature: Int {

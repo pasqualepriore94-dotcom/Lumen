@@ -90,6 +90,8 @@ final class Library {
     private(set) var progress: [String: WatchProgress] = [:]
     private(set) var watched: [String: WatchedEntry] = [:]
     private(set) var seriesWatch: [String: SeriesWatch] = [:]
+    /// Gusti calcolati una volta finché non cambia ciò che hai visto (prima: un ricalcolo per ogni locandina).
+    @ObservationIgnored var tasteCache: (signature: Int, profile: TasteProfile)?
 
     init() {
         let d = UserDefaults.standard

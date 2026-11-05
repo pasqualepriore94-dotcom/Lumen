@@ -360,8 +360,12 @@ final class LinkLibrary {
             matchedItems = m.items.merging(matchedItems) { _, new in new }
         }
         isLoaded = true
-        autoAddCourses()
-        autoAddDocumentaries()
+        // Corsi e documentari non abbinati: riconosciuti in background, dopo che la Home è comparsa.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(4))
+            await self?.autoAddCourses()
+            await self?.autoAddDocumentaries()
+        }
     }
 
     nonisolated private static var matchesFile: URL {
@@ -464,7 +468,7 @@ final class LinkLibrary {
         fresh.save()
         movieLinks = ml; episodeLinks = el; matchedItems = mi
         saveMatches()
-        add(unmatched)
+        if !unmatched.isEmpty { add(unmatched) }
         // Titoli di "La mia lista" diventati guardabili → avviso subito.
         Task { await WatchlistMonitor.shared.check() }
     }
@@ -504,7 +508,7 @@ final class LinkLibrary {
     // MARK: Contenuti senza scheda nel catalogo
 
     /// id stabile per un contenuto aggiunto senza scheda TMDB ("link-…").
-    static func customId(_ name: String, series: Bool) -> String {
+    nonisolated static func customId(_ name: String, series: Bool) -> String {
         let key = (series ? "s|" : "m|") + name.lowercased()
         return "link-" + SHA256.hash(data: Data(key.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
     }
@@ -531,26 +535,52 @@ final class LinkLibrary {
         return item
     }
 
-    /// In blocco: film senza scheda (un solo passaggio sull'elenco).
-    func addCustomMovies(_ list: [LinkMedia]) {
-        removeLinks(Set(list.map(\.id)))
-        for media in list {
+    /// Schede dei film senza scheda TMDB (calcolate fuori dal thread principale: possono essere decine di migliaia).
+    nonisolated static func customMoviePairs(_ list: [LinkMedia], overview: String? = nil) -> [(LinkMedia, MediaItem)] {
+        list.map { media in
             let p = ParsedTitle.parse(media.title)
-            let item = MediaItem(id: Self.customId(p.title, series: false), title: p.title, kind: .movie,
+            let item = MediaItem(id: customId(p.title, series: false), title: p.title, kind: .movie,
                                  poster: media.poster, backdrop: media.poster,
-                                 overview: "Aggiunto dalla playlist" + (media.group.map { " · \($0)" } ?? ""), year: p.year)
-            setMovieLink(media, for: item)
+                                 overview: overview ?? ("Aggiunto dalla playlist" + (media.group.map { " · \($0)" } ?? "")), year: p.year)
+            return (media, item)
         }
     }
 
-    func addCustomSeries(_ list: [(name: String, year: Int?, poster: URL?, episodes: [String: LinkMedia])], overview: String? = nil) {
-        removeLinks(Set(list.flatMap { $0.episodes.values.map(\.id) }))
-        for s in list {
+    nonisolated static func customSeriesPairs(_ list: [(name: String, year: Int?, poster: URL?, episodes: [String: LinkMedia])],
+                                              overview: String?) -> [([String: LinkMedia], MediaItem)] {
+        list.map { s in
             let text = overview.map { "\($0) · \(s.episodes.count) \($0 == "Corso" ? "lezioni" : "episodi")" } ?? "Aggiunta dalla playlist"
-            let item = MediaItem(id: Self.customId(s.name, series: true), title: s.name, kind: .series,
+            let item = MediaItem(id: customId(s.name, series: true), title: s.name, kind: .series,
                                  poster: s.poster, backdrop: s.poster, overview: text, year: s.year)
-            setEpisodeLinks(s.episodes, for: item)
+            return (s.episodes, item)
         }
+    }
+
+    /// In blocco: un solo aggiornamento degli elenchi, delle novità e del salvataggio
+    /// (prima un passaggio per titolo: con 33.000 voci l'app si bloccava e veniva chiusa).
+    func addCustom(movies: [(LinkMedia, MediaItem)], series: [([String: LinkMedia], MediaItem)]) {
+        guard !movies.isEmpty || !series.isEmpty else { return }
+        removeLinks(Set(movies.map(\.0.id) + series.flatMap { $0.0.values.map(\.id) }))
+        applyBatch(movies: movies, series: series, unmatched: [])
+    }
+
+    func addCustomMovies(_ list: [LinkMedia]) {
+        addCustom(movies: Self.customMoviePairs(list), series: [])
+    }
+
+    /// Come sopra, preparando le schede in background.
+    func addCustomMoviesAsync(_ list: [LinkMedia]) async {
+        let pairs = await Task.detached(priority: .userInitiated) { LinkLibrary.customMoviePairs(list) }.value
+        addCustom(movies: pairs, series: [])
+    }
+
+    func addCustomSeriesAsync(_ list: [(name: String, year: Int?, poster: URL?, episodes: [String: LinkMedia])], overview: String? = nil) async {
+        let pairs = await Task.detached(priority: .userInitiated) { LinkLibrary.customSeriesPairs(list, overview: overview) }.value
+        addCustom(movies: [], series: pairs)
+    }
+
+    func addCustomSeries(_ list: [(name: String, year: Int?, poster: URL?, episodes: [String: LinkMedia])], overview: String? = nil) {
+        addCustom(movies: [], series: Self.customSeriesPairs(list, overview: overview))
     }
 
     /// Abbinamento manuale a una scheda del catalogo scelta dall'amministratore.
@@ -564,23 +594,48 @@ final class LinkLibrary {
         setEpisodeLinks(episodes, for: item)
     }
 
+    /// Ordine alfabetico veloce (chiave calcolata una volta per titolo: con decine di migliaia di titoli
+    /// il confronto "localizzato" a ogni passo faceva scattare l'app).
+    nonisolated static func sortedByTitle(_ list: [MediaItem]) -> [MediaItem] {
+        list.map { ($0.title.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil), $0) }
+            .sorted { $0.0 < $1.0 }
+            .map(\.1)
+    }
+
     @ObservationIgnored private var customCache: (version: Int, items: [MediaItem]) = (-1, [])
 
     /// Contenuti aggiunti senza scheda TMDB (calcolati una volta per versione degli abbinamenti).
     var customItems: [MediaItem] {
         _ = matchedItems.count   // osservazione: la vista si aggiorna quando cambiano
         if customCache.version != matchesVersion {
-            customCache = (matchesVersion, matchedItems.values.filter { $0.id.hasPrefix("link-") }
-                .sorted { $0.title.localizedCompare($1.title) == .orderedAscending })
+            customCache = (matchesVersion, Self.sortedByTitle(matchedItems.values.filter { $0.id.hasPrefix("link-") }))
         }
         return customCache.items
     }
 
+    @ObservationIgnored private var groupCache: (version: Int, courses: [MediaItem], movies: [MediaItem], series: [MediaItem]) = (-1, [], [], [])
+
+    /// Corsi / altri film / altre serie, divisi una sola volta per versione degli abbinamenti
+    /// (prima a ogni aggiornamento della Home: con decine di migliaia di voci l'app scattava).
+    private var groups: (courses: [MediaItem], movies: [MediaItem], series: [MediaItem]) {
+        let all = customItems
+        if groupCache.version != matchesVersion {
+            var c: [MediaItem] = [], m: [MediaItem] = [], sr: [MediaItem] = []
+            for item in all {
+                if Self.isCourseItem(item) { c.append(item) }
+                else if Self.isDocumentaryItem(item) { continue }
+                else if item.isSeries { sr.append(item) } else { m.append(item) }
+            }
+            groupCache = (matchesVersion, c, m, sr)
+        }
+        return (groupCache.courses, groupCache.movies, groupCache.series)
+    }
+
     /// Categoria "Corsi": contenuti formativi aggiunti dalla playlist.
-    var courseItems: [MediaItem] { customItems.filter { Self.isCourseItem($0) } }
-    /// "Altri film" / "Altre serie": contenuti senza scheda che non sono corsi.
-    var otherMovies: [MediaItem] { customItems.filter { !$0.isSeries && !Self.isCourseItem($0) && !Self.isDocumentaryItem($0) } }
-    var otherSeries: [MediaItem] { customItems.filter { $0.isSeries && !Self.isCourseItem($0) && !Self.isDocumentaryItem($0) } }
+    var courseItems: [MediaItem] { groups.courses }
+    /// "Altri film" / "Altre serie": contenuti senza scheda che non sono corsi né documentari.
+    var otherMovies: [MediaItem] { groups.movies }
+    var otherSeries: [MediaItem] { groups.series }
 
     nonisolated static let docWords = ["documentar", "documentary", "docuserie", "docu-serie", "docufilm", "docu film",
                                        "docu ", "|docu", "doc:", "inchiesta", "reportage"]
@@ -612,38 +667,35 @@ final class LinkLibrary {
     var documentaryItems: [MediaItem] {
         _ = matchedItems.count
         if docCache.version != matchesVersion {
-            docCache = (matchesVersion, matchedItems.values.filter { docIds.contains($0.id) || Self.isDocumentaryItem($0) }
-                .sorted { $0.title.localizedCompare($1.title) == .orderedAscending })
+            docCache = (matchesVersion, Self.sortedByTitle(matchedItems.values.filter { docIds.contains($0.id) || Self.isDocumentaryItem($0) }))
         }
         return docCache.items
     }
 
     /// I documentari della playlist rimasti senza scheda vengono aggiunti comunque (categoria Documentari).
-    func autoAddDocumentaries() {
-        let docs = items.filter { !$0.isLive && Self.isDocumentary($0) && !Self.isCourse($0.title + " " + ($0.group ?? "")) }
-        guard !docs.isEmpty else { return }
-        var movies: [LinkMedia] = []
-        var series: [String: (year: Int?, poster: URL?, episodes: [String: LinkMedia])] = [:]
-        for m in docs {
-            let p = ParsedTitle.parse(m.title)
-            if let s = p.season, let e = p.episode {
-                var entry = series[p.title] ?? (p.year, m.poster, [:])
-                entry.episodes["s\(s)e\(e)"] = m
-                if entry.poster == nil { entry.poster = m.poster }
-                series[p.title] = entry
-            } else {
-                movies.append(m)
+    func autoAddDocumentaries() async {
+        let snapshot = items
+        let prepared = await Task.detached(priority: .utility) { () -> ([(LinkMedia, MediaItem)], [([String: LinkMedia], MediaItem)]) in
+            let docs = snapshot.filter { !$0.isLive && LinkLibrary.isDocumentary($0) && !LinkLibrary.isCourse($0.title + " " + ($0.group ?? "")) }
+            guard !docs.isEmpty else { return ([], []) }
+            var movies: [LinkMedia] = []
+            var series: [String: (year: Int?, poster: URL?, episodes: [String: LinkMedia])] = [:]
+            for m in docs {
+                let p = ParsedTitle.parse(m.title)
+                if let s = p.season, let e = p.episode {
+                    var entry = series[p.title] ?? (p.year, m.poster, [:])
+                    entry.episodes["s\(s)e\(e)"] = m
+                    if entry.poster == nil { entry.poster = m.poster }
+                    series[p.title] = entry
+                } else {
+                    movies.append(m)
+                }
             }
-        }
-        removeLinks(Set(movies.map(\.id)))
-        for media in movies {
-            let p = ParsedTitle.parse(media.title)
-            let item = MediaItem(id: Self.customId(p.title, series: false), title: p.title, kind: .movie,
-                                 poster: media.poster, backdrop: media.poster, overview: "Documentario · dalla playlist", year: p.year)
-            setMovieLink(media, for: item)
-        }
-        addCustomSeries(series.map { (name: $0.key, year: $0.value.year, poster: $0.value.poster, episodes: $0.value.episodes) },
-                        overview: "Documentario")
+            return (LinkLibrary.customMoviePairs(movies, overview: "Documentario · dalla playlist"),
+                    LinkLibrary.customSeriesPairs(series.map { (name: $0.key, year: $0.value.year, poster: $0.value.poster, episodes: $0.value.episodes) },
+                                                  overview: "Documentario"))
+        }.value
+        addCustom(movies: prepared.0, series: prepared.1)
     }
 
     nonisolated static let courseWords = ["corso", "corsi", "course", "lezione", "lezioni", "lesson", "tutorial",
@@ -668,21 +720,25 @@ final class LinkLibrary {
 
     /// Le voci formative non abbinate (corsi, lezioni, tutorial) diventano corsi nella categoria "Corsi":
     /// un corso per gruppo della playlist, con le lezioni in ordine.
-    func autoAddCourses() {
-        let candidates = items.filter { !$0.isLive && Self.isCourse($0.title + " " + ($0.group ?? "")) }
-        guard !candidates.isEmpty else { return }
-        let groups = Dictionary(grouping: candidates) { m -> String in
-            let g = (m.group ?? "").trimmingCharacters(in: .whitespaces)
-            return g.isEmpty ? ParsedTitle.parse(m.title).title : g
-        }
-        var list: [(name: String, year: Int?, poster: URL?, episodes: [String: LinkMedia])] = []
-        for (name, lessons) in groups {
-            let sorted = lessons.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
-            var eps: [String: LinkMedia] = [:]
-            for (i, m) in sorted.enumerated() { eps["s1e\(i + 1)"] = m }
-            list.append((name: name, year: nil, poster: sorted.first { $0.poster != nil }?.poster, episodes: eps))
-        }
-        addCustomSeries(list, overview: "Corso")
+    func autoAddCourses() async {
+        let snapshot = items
+        let pairs = await Task.detached(priority: .utility) { () -> [([String: LinkMedia], MediaItem)] in
+            let candidates = snapshot.filter { !$0.isLive && LinkLibrary.isCourse($0.title + " " + ($0.group ?? "")) }
+            guard !candidates.isEmpty else { return [] }
+            let groups = Dictionary(grouping: candidates) { m -> String in
+                let g = (m.group ?? "").trimmingCharacters(in: .whitespaces)
+                return g.isEmpty ? ParsedTitle.parse(m.title).title : g
+            }
+            var list: [(name: String, year: Int?, poster: URL?, episodes: [String: LinkMedia])] = []
+            for (name, lessons) in groups {
+                let sorted = lessons.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+                var eps: [String: LinkMedia] = [:]
+                for (i, m) in sorted.enumerated() { eps["s1e\(i + 1)"] = m }
+                list.append((name: name, year: nil, poster: sorted.first { $0.poster != nil }?.poster, episodes: eps))
+            }
+            return LinkLibrary.customSeriesPairs(list, overview: "Corso")
+        }.value
+        addCustom(movies: [], series: pairs)
     }
 
     /// Scheda costruita in locale per un contenuto senza scheda TMDB (stagioni dagli episodi collegati).

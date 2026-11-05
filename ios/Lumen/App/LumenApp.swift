@@ -108,6 +108,7 @@ struct LumenApp: App {
 }
 
 struct RootView: View {
+    @State private var mountedTabs: Set<AppTab> = [.home]
     @Environment(AppState.self) private var app
     @Environment(Library.self) private var library
     @Environment(UpdateChecker.self) private var updates
@@ -118,20 +119,29 @@ struct RootView: View {
         ZStack(alignment: .bottom) {
             Theme.background.ignoresSafeArea()
 
+            // Le schermate vengono create la prima volta che le apri (prima tutte all'avvio: apertura scattosa),
+            // poi restano in memoria per tornare subito dove eri.
             ZStack {
                 HomeView()
                     .opacity(app.selectedTab == .home ? 1 : 0)
                     .allowsHitTesting(app.selectedTab == .home)
-                ClipsView(isActive: app.selectedTab == .clips)
-                    .opacity(app.selectedTab == .clips ? 1 : 0)
-                    .allowsHitTesting(app.selectedTab == .clips)
-                SearchView()
-                    .opacity(app.selectedTab == .search ? 1 : 0)
-                    .allowsHitTesting(app.selectedTab == .search)
-                ProfileView()
-                    .opacity(app.selectedTab == .profile ? 1 : 0)
-                    .allowsHitTesting(app.selectedTab == .profile)
+                if mountedTabs.contains(.clips) {
+                    ClipsView(isActive: app.selectedTab == .clips)
+                        .opacity(app.selectedTab == .clips ? 1 : 0)
+                        .allowsHitTesting(app.selectedTab == .clips)
+                }
+                if mountedTabs.contains(.search) {
+                    SearchView()
+                        .opacity(app.selectedTab == .search ? 1 : 0)
+                        .allowsHitTesting(app.selectedTab == .search)
+                }
+                if mountedTabs.contains(.profile) {
+                    ProfileView()
+                        .opacity(app.selectedTab == .profile ? 1 : 0)
+                        .allowsHitTesting(app.selectedTab == .profile)
+                }
             }
+            .onChange(of: app.selectedTab, initial: true) { mountedTabs.insert(app.selectedTab) }
 
             FloatingTabBar(selection: $app.selectedTab)
         }

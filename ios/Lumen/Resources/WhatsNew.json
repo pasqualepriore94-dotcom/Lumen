@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.32.3",
+    "title": "Più fluida",
+    "items": [
+      {
+        "icon": "bolt.fill",
+        "text": "Apertura più fluida: le schermate Clip, Cerca e Il mio vengono preparate solo quando le apri, i gusti non vengono ricalcolati per ogni locandina e il lavoro pesante (corsi, documentari, ricerca di iPhone) avviene in background."
+      },
+      {
+        "icon": "tray.and.arrow.down.fill",
+        "text": "Aggiungere al catalogo decine di migliaia di contenuti non abbinati non blocca più l'app: vengono aggiunti tutti insieme in pochi secondi."
+      }
+    ]
+  },
+  {
     "version": "0.32.2",
     "title": "Schede più pulite",
     "items": [

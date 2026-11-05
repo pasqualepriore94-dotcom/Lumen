@@ -211,7 +211,9 @@ extension LinkLibrary {
             if let item = s.match { seriesLinks.append((s.episodes, item)) } else { unmatched.append(contentsOf: s.episodes.values) }
         }
         applyBatch(movies: movieLinks, series: seriesLinks, unmatched: unmatched)
-        autoAddCourses()
-        autoAddDocumentaries()
+        Task { @MainActor in
+            await autoAddCourses()
+            await autoAddDocumentaries()
+        }
     }
 }

@@ -176,27 +176,29 @@ enum SpotlightIndexer {
     static func indexIfNeeded() async {
         let links = LinkLibrary.shared
         let items = Array(links.matchedItems.values)
-        let signature = "\(items.count)|\(items.map(\.id).sorted().prefix(50).joined())"
-        guard UserDefaults.standard.string(forKey: signatureKey) != signature else { return }
-        let entries = items.map { item -> CSSearchableItem in
-            let attrs = CSSearchableItemAttributeSet(contentType: .movie)
-            attrs.title = item.title
-            let kind = item.isSeries ? "Serie TV" : "Film"
-            attrs.contentDescription = ([kind, item.year.map(String.init)].compactMap { $0 } + [item.tagLine].filter { !$0.isEmpty })
-                .joined(separator: " · ") + "\nDa guardare su Lumen"
-            attrs.keywords = (item.tags ?? []) + [kind, "Lumen"]
-            attrs.displayName = item.title
-            return CSSearchableItem(uniqueIdentifier: item.id, domainIdentifier: domain, attributeSet: attrs)
-        }
-        let index = CSSearchableIndex.default()
-        try? await index.deleteSearchableItems(withDomainIdentifiers: [domain])
-        // A blocchi: la playlist può avere decine di migliaia di titoli.
-        var start = 0
-        while start < entries.count {
-            let chunk = Array(entries[start..<min(start + 1000, entries.count)])
-            try? await index.indexSearchableItems(chunk)
-            start += 1000
-        }
-        UserDefaults.standard.set(signature, forKey: signatureKey)
+        let domain = Self.domain, key = signatureKey
+        // Preparazione e indicizzazione in background: niente scatti mentre usi l'app.
+        await Task.detached(priority: .background) {
+            let signature = "\(items.count)|\(items.map(\.id).sorted().prefix(50).joined())"
+            guard UserDefaults.standard.string(forKey: key) != signature else { return }
+            let entries = items.map { item -> CSSearchableItem in
+                let attrs = CSSearchableItemAttributeSet(contentType: .movie)
+                attrs.title = item.title
+                let kind = item.isSeries ? "Serie TV" : "Film"
+                attrs.contentDescription = ([kind, item.year.map(String.init)].compactMap { $0 } + [item.tagLine].filter { !$0.isEmpty })
+                    .joined(separator: " · ") + "\nDa guardare su Lumen"
+                attrs.keywords = (item.tags ?? []) + [kind, "Lumen"]
+                attrs.displayName = item.title
+                return CSSearchableItem(uniqueIdentifier: item.id, domainIdentifier: domain, attributeSet: attrs)
+            }
+            let index = CSSearchableIndex.default()
+            try? await index.deleteSearchableItems(withDomainIdentifiers: [domain])
+            var start = 0
+            while start < entries.count {
+                try? await index.indexSearchableItems(Array(entries[start..<min(start + 1000, entries.count)]))
+                start += 1000
+            }
+            UserDefaults.standard.set(signature, forKey: key)
+        }.value
     }
 }

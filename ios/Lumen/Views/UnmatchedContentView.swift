@@ -17,6 +17,7 @@ struct UnmatchedContentView: View {
     @State private var message: String?
     @State private var matching: MatchTarget?
     @State private var posterRun: (done: Int, total: Int, found: Int)?
+    @State private var adding = false
 
     struct MatchTarget: Identifiable {
         var id: String
@@ -211,7 +212,7 @@ struct UnmatchedContentView: View {
                     .font(.subheadline.weight(.bold)).frame(maxWidth: .infinity).padding(.vertical, 12)
             }
             .buttonStyle(GlassButtonStyle(tint: app.accent))
-            .disabled(selection.isEmpty)
+            .disabled(selection.isEmpty || adding)
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 16).padding(.vertical, 10)
@@ -223,14 +224,24 @@ struct UnmatchedContentView: View {
         switch tab {
         case .movies:
             let list = movies.filter { chosen.contains($0.id) }
-            links.addCustomMovies(list.map(\.media))
             movies.removeAll { chosen.contains($0.id) }
-            message = "\(list.count) film aggiunti al catalogo (Categorie → Altri contenuti)."
+            adding = true
+            message = "Aggiunta di \(list.count) film in corso…"
+            Task {
+                await links.addCustomMoviesAsync(list.map(\.media))
+                adding = false
+                message = "\(list.count) film aggiunti al catalogo (Categorie → Altri contenuti)."
+            }
         case .series:
             let list = series.filter { chosen.contains($0.id) }
-            links.addCustomSeries(list.map { (name: $0.name, year: $0.year, poster: $0.poster, episodes: $0.episodes) })
             series.removeAll { chosen.contains($0.id) }
-            message = "\(list.count) serie aggiunte al catalogo (Categorie → Altri contenuti)."
+            adding = true
+            message = "Aggiunta di \(list.count) serie in corso…"
+            Task {
+                await links.addCustomSeriesAsync(list.map { (name: $0.name, year: $0.year, poster: $0.poster, episodes: $0.episodes) })
+                adding = false
+                message = "\(list.count) serie aggiunte al catalogo (Categorie → Altri contenuti)."
+            }
         case .lives:
             let list = lives.filter { chosen.contains($0.id) }
             links.add(list)

@@ -502,7 +502,8 @@ struct SectionRow: View {
                 .padding(.bottom, -8)
             }
             SectionHeader(title: section.title, actionTitle: "Mostra tutto") { showAll = true }
-            PosterRow(items: section.items, layout: section.layout)
+            // Nella riga bastano i primi titoli (tutti in "Mostra tutto"): righe da decine di migliaia rallentavano la Home.
+            PosterRow(items: section.items.count > 80 ? Array(section.items.prefix(80)) : section.items, layout: section.layout)
         }
         .sheet(isPresented: $showAll) { SectionGridView(section: section) }
     }
