@@ -25,6 +25,11 @@ struct DetailView: View {
     @State private var previewPaused = false
     /// Trailer fermato dall'utente (tocco sul video o pulsante pausa).
     @State private var previewStopped = false
+    /// "Perché te lo consiglio" (Apple Intelligence, con ripiego semplice).
+    @State private var whyText: String?
+    /// Trama tradotta in italiano quando TMDB ha solo quella inglese.
+    @State private var translatedOverview: String?
+    @State private var translating = false
 
     private var current: MediaItem { detail?.item ?? item }
     private var canStream: Bool { app.provider.capabilities.streams }
@@ -136,6 +141,7 @@ struct DetailView: View {
             TrailerPlayerView(title: current.title, url: t.url)
         }
         .task(id: app.contentKey) { await load() }
+        .task(id: (detail?.item.id ?? "") + "|\(library.activitySignature)") { await loadAIExtras() }
     }
 
     private func close() {
@@ -405,10 +411,53 @@ struct DetailView: View {
         }
     }
 
+    /// Spiegazione della compatibilità e traduzione della trama, generate sul telefono.
+    private func loadAIExtras() async {
+        guard let detail else { return }
+        let genres = detail.genres.isEmpty ? (detail.item.tags ?? []) : detail.genres
+        if library.taste.compatibility(detail.item, genres: genres) != nil {
+            let sig = library.activitySignature
+            let similar = WhyRecommend.similarSeen(genres: genres, excluding: detail.item.id, library: library)
+            whyText = WhyRecommend.cached(detail.item.id, signature: sig) ?? WhyRecommend.fallback(similar: similar, genres: genres)
+            if let ai = await WhyRecommend.generate(item: detail.item, overview: detail.item.overview, genres: genres,
+                                                    similar: similar, signature: sig) {
+                withAnimation { whyText = ai }
+            }
+        } else {
+            whyText = nil
+        }
+        if detail.overviewIsEnglish, let text = detail.item.overview {
+            translatedOverview = PlotWriter.cachedTranslation(detail.item.id)
+            guard translatedOverview == nil, AIText.isAvailable else { return }
+            translating = true
+            let t = await PlotWriter.translate(id: detail.item.id, text: text)
+            translating = false
+            if let t { withAnimation { translatedOverview = t } }
+        }
+    }
+
+    @ViewBuilder
+    private var whyRow: some View {
+        if let whyText {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "sparkles").font(.system(size: 13, weight: .semibold)).foregroundStyle(app.accent)
+                    .padding(.top, 2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Perché te lo consiglio").font(.system(size: 11, weight: .bold)).foregroundStyle(Theme.secondaryText)
+                    Text(whyText).font(.system(size: 14)).foregroundStyle(.white.opacity(0.92))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .transition(.opacity)
+        }
+    }
+
     @ViewBuilder
     private var ratings: some View {
         let match = library.taste.compatibility(current, genres: detail?.genres)
         let hasAny = current.scoreLabel != nil || detail?.imdbRating != nil || match != nil
+        if match != nil { whyRow }
         if hasAny {
             GlassGroup(spacing: 8) {
                 HStack(spacing: 8) {
@@ -484,12 +533,19 @@ struct DetailView: View {
 
     @ViewBuilder
     private var overview: some View {
-        if let text = current.overview {
+        if let text = translatedOverview ?? current.overview {
+          VStack(alignment: .leading, spacing: 4) {
+            if detail?.overviewIsEnglish == true {
+                Label(translatedOverview != nil ? "Trama tradotta con Apple Intelligence" : (translating ? "Traduzione in corso…" : "Trama disponibile solo in inglese"),
+                      systemImage: translatedOverview != nil ? "sparkles" : "globe")
+                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.secondaryText)
+            }
             Text(text)
                 .font(.subheadline)
                 .foregroundStyle(.white.opacity(0.9))
                 .lineLimit(expandedOverview ? nil : 5)
                 .onTapGesture { withAnimation { expandedOverview.toggle() } }
+          }
         } else if detail != nil {
             Text("Trama non disponibile in italiano.").font(.subheadline).foregroundStyle(Theme.secondaryText)
         }

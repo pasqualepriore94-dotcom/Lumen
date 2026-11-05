@@ -167,6 +167,8 @@ struct ClipPage: View {
     @State private var trailerId: String?
     @State private var trailerPlaying = false
     @State private var info: MediaDetail?
+    /// Trama breve in italiano scritta da Apple Intelligence.
+    @State private var shortPlot: String?
 
     private var item: MediaItem { info?.item ?? clip.item }
     private var sheetOpen: Bool { app.detailItem != nil }
@@ -194,6 +196,12 @@ struct ClipPage: View {
         .onChange(of: muted) { looping?.player.isMuted = muted }
         .onChange(of: sheetOpen) { syncPlayback() }
         .task(id: isCurrent) { if isCurrent { await loadTrailer() } }
+        .task(id: "\(isCurrent)|\(item.id)|\(item.overview?.count ?? 0)") {
+            guard let text = item.overview, !text.isEmpty else { return }
+            if let c = PlotWriter.cachedShort(item.id) { shortPlot = c; return }
+            guard isCurrent else { return }
+            if let s = await PlotWriter.short(id: item.id, text: text) { withAnimation { shortPlot = s } }
+        }
         .onDisappear {
             looping?.tearDown()
             looping = nil
@@ -345,7 +353,7 @@ struct ClipPage: View {
                     Text(item.tagLine).font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.7))
                         .lineLimit(1)
                 }
-                if let overview = item.overview, !overview.isEmpty, clip.hasDetail {
+                if let overview = shortPlot ?? item.overview, !overview.isEmpty, clip.hasDetail {
                     Text(overview).font(.system(size: 14)).lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)

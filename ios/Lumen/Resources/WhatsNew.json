@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.31.0",
+    "title": "Apple Intelligence ovunque",
+    "items": [
+      {
+        "icon": "sparkles",
+        "text": "«Perché te lo consiglio»: sotto la percentuale di compatibilità una frase spiega cosa ha in comune il titolo con quelli che hai già visto."
+      },
+      {
+        "icon": "rectangle.stack.badge.person.crop",
+        "text": "Categorie su misura nella Home, create dai tuoi gusti (es. «Thriller psicologici per te»). Si rinnovano da sole; puoi rigenerarle da Categorie."
+      },
+      {
+        "icon": "text.quote",
+        "text": "Trame migliori: nelle Clip una trama breve in italiano; nelle schede, se TMDB ha solo la trama inglese, viene tradotta."
+      },
+      {
+        "icon": "mic.fill",
+        "text": "Siri: «Cosa guardo stasera su Lumen», «Cerca su Lumen», «Riprendi la visione su Lumen». I titoli disponibili compaiono anche nella ricerca di iPhone (Spotlight)."
+      }
+    ]
+  },
+  {
     "version": "0.30.0",
     "title": "Documentari",
     "items": [

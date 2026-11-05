@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreSpotlight
 import AVFoundation
 
 @main
@@ -163,6 +164,14 @@ struct RootView: View {
         .onOpenURL { url in
             if let request = ApprovalRequest(url: url) { app.approvalRequest = request }
         }
+        // Tocco su un titolo di Lumen nella ricerca Spotlight
+        .onContinueUserActivity(CSSearchableItemActionType) { activity in
+            if let id = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String {
+                IntentRouter.shared.send(.open(id))
+            }
+        }
+        // Comandi di Siri e Comandi rapidi
+        .onChange(of: IntentRouter.shared.token) { handleIntent() }
         .sheet(item: Binding(get: { app.approvalRequest }, set: { app.approvalRequest = $0 })) { ApprovalSheet(request: $0) }
         .sheet(item: Binding(get: { app.announcement }, set: { app.announcement = $0 })) { AnnouncementSheet(notification: $0) }
         .onChange(of: library.activitySignature) { AchievementTracker.shared.check(library) }
@@ -175,6 +184,38 @@ struct RootView: View {
             }
             KeyboardDismisser.shared.install()
             AppIconMemory.restoreIfNeeded()
+            handleIntent()
+            Task { @MainActor in
+                // Titoli guardabili nella ricerca di iPhone (dopo l'avvio, solo se sono cambiati)
+                try? await Task.sleep(for: .seconds(20))
+                await LinkLibrary.shared.loadIfNeeded()
+                await SpotlightIndexer.indexIfNeeded()
+            }
+        }
+    }
+}
+
+extension RootView {
+    func handleIntent() {
+        guard let action = IntentRouter.shared.pending else { return }
+        switch action {
+        case .ask:
+            app.detailItem = nil
+            app.selectedTab = .search   // la richiesta la legge la schermata Cerca
+        case .resume:
+            IntentRouter.shared.pending = nil
+            if let last = library.continueWatching.first {
+                app.selectedTab = .home
+                app.detailItem = last.item
+            } else {
+                app.selectedTab = .home
+            }
+        case .open(let id):
+            IntentRouter.shared.pending = nil
+            Task { @MainActor in
+                await LinkLibrary.shared.loadIfNeeded()
+                if let item = LinkLibrary.shared.matchedItems[id] { app.detailItem = item }
+            }
         }
     }
 }

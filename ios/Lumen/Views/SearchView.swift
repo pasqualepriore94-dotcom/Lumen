@@ -50,7 +50,21 @@ struct SearchView: View {
                 await runSearch()
             }
         }
-        .onAppear { if aiSearch { assistant.prewarm(library: library) } }
+        .onAppear {
+            if aiSearch { assistant.prewarm(library: library) }
+            takeIntentQuery()
+        }
+        .onChange(of: IntentRouter.shared.token) { takeIntentQuery() }
+    }
+
+    /// Richiesta arrivata da Siri ("Cosa guardo stasera su Lumen", "Cerca su Lumen").
+    private func takeIntentQuery() {
+        guard case .ask(let q)? = IntentRouter.shared.pending else { return }
+        IntentRouter.shared.pending = nil
+        app.detailItem = nil
+        app.selectedTab = .search
+        focused = false
+        query = q
     }
 
     private var searchBar: some View {

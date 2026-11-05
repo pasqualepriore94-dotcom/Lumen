@@ -247,6 +247,8 @@ struct MediaDetail: Codable {
     /// Saga a cui appartiene il film (es. "Harry Potter - La saga"), con tutti i capitoli in ordine di uscita.
     var collectionName: String?
     var collection: [MediaItem] = []
+    /// La trama arriva da TMDB in inglese (manca quella italiana).
+    var overviewIsEnglish = false
 
     enum CodingKeys: String, CodingKey {
         case item, seasons, cast, duration, genres, director, trailer, imdbId, imdbRating, watchProviders, watchLink, releases

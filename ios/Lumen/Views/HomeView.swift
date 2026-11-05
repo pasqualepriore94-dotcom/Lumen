@@ -44,6 +44,15 @@ struct HomeView: View {
                                 PosterRow(items: library.myList, layout: .poster)
                             }
                         }
+                        // Categorie su misura create da Apple Intelligence in base ai tuoi gusti
+                        ForEach(PersonalRows.shared.rows) { row in
+                            let items = row.items.filter(matches)
+                            if items.count >= 3 {
+                                SectionRow(section: CatalogSection(id: row.id, title: row.title, style: nil, items: items),
+                                           badge: "sparkles")
+                                    .id(row.id)
+                            }
+                        }
                         // Contenuti della playlist senza scheda TMDB: nelle categorie principali
                         let custom = LinkLibrary.shared
                         if activeFilter == nil || activeFilter == .movies, !custom.otherMovies.isEmpty {
@@ -88,6 +97,13 @@ struct HomeView: View {
                 .ignoresSafeArea()
         }
         .task(id: app.contentKey) { await load() }
+        .task(id: library.activitySignature) {
+            // Dopo l'avvio (per non rallentarlo): categorie su misura, rigenerate quando sono vecchie.
+            try? await Task.sleep(for: .seconds(12))
+            guard !Task.isCancelled else { return }
+            while !LinkLibrary.shared.isLoaded { try? await Task.sleep(for: .seconds(1)) }
+            await PersonalRows.shared.refreshIfNeeded(app: app, library: library)
+        }
         .sheet(isPresented: $showLive) { LiveChannelsView() }
         .sheet(isPresented: $showAssistant) { AssistantView() }
         .sheet(isPresented: $showCustom) {
@@ -134,6 +150,13 @@ struct HomeView: View {
                         Button("Corsi (\(LinkLibrary.shared.courseItems.count))", systemImage: "graduationcap") {
                             withAnimation { proxy.scrollTo("courses", anchor: .top) }
                         }
+                    }
+                    if AIText.isAvailable {
+                        Button(PersonalRows.shared.generating ? "Creazione categorie su misura…" : "Nuove categorie su misura",
+                               systemImage: "sparkles") {
+                            Task { await PersonalRows.shared.refreshIfNeeded(app: app, library: library, force: true) }
+                        }
+                        .disabled(PersonalRows.shared.generating)
                     }
                     if !LinkLibrary.shared.documentaryItems.isEmpty {
                         Button("Documentari (\(LinkLibrary.shared.documentaryItems.count))", systemImage: "film.stack") {
@@ -350,10 +373,21 @@ struct HeroCard: View {
 
 struct SectionRow: View {
     let section: CatalogSection
+    /// Icona accanto al titolo (es. "sparkles" per le categorie create da Apple Intelligence).
+    var badge: String? = nil
     @State private var showAll = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            if let badge {
+                HStack(spacing: 6) {
+                    Image(systemName: badge).font(.system(size: 11, weight: .bold))
+                    Text("Su misura per te").font(.system(size: 11, weight: .bold))
+                }
+                .foregroundStyle(Theme.secondaryText)
+                .padding(.horizontal, 16)
+                .padding(.bottom, -8)
+            }
             SectionHeader(title: section.title, actionTitle: "Mostra tutto") { showAll = true }
             PosterRow(items: section.items, layout: section.layout)
         }

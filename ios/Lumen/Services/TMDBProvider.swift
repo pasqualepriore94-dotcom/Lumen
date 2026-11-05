@@ -263,6 +263,13 @@ struct TMDBProvider: ContentProvider {
                                  genres: genreNames, director: director, trailer: trailer, imdbId: imdbId,
                                  imdbRating: imdbRating, watchProviders: watch, watchLink: watchLink)
         detail.releases = isMovie ? movieReleases(json) : seriesReleases(json)
+        // Trama solo in inglese: la prendo comunque (poi la traduce Apple Intelligence, se c'è).
+        if base.overview == nil, !language.hasPrefix("en"),
+           let en = try? await get("/\(isMovie ? "movie" : "tv")/\(tmdbId)", ["language": "en-US"]),
+           let text = en["overview"] as? String, !text.isEmpty {
+            detail.item.overview = text
+            detail.overviewIsEnglish = true
+        }
         // Saga (Harry Potter, Il Signore degli Anelli, …): tutti i film in ordine di uscita.
         if isMovie, let coll = json["belongs_to_collection"] as? [String: Any], let cid = coll["id"] as? Int,
            let cjson = try? await get("/collection/\(cid)") {
@@ -455,7 +462,7 @@ struct TMDBProvider: ContentProvider {
 
     func get(_ path: String, _ query: [String: String] = [:]) async throws -> [String: Any] {
         guard var comps = URLComponents(string: base + path) else { throw ProviderError.invalidURL(base + path) }
-        var items = [URLQueryItem(name: "language", value: language)]
+        var items = query["language"] == nil ? [URLQueryItem(name: "language", value: language)] : []
         items += query.map { URLQueryItem(name: $0.key, value: $0.value) }
         let bearer = key.hasPrefix("eyJ")
         if !bearer { items.append(URLQueryItem(name: "api_key", value: key)) }
