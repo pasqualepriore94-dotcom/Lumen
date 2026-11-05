@@ -65,7 +65,6 @@ jobs:
           URL="https://$PROJECT_REF.supabase.co/functions/v1/lumen-auth"
           sleep 5
           curl -sS "$URL/health"; echo
-          CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/login" -H 'Content-Type: application/json' -d '{"username":"admin","password":"admin"}')
-          echo "Login admin di prova: HTTP $CODE"
+          # Niente login di prova: conterebbe come tentativo errato e potrebbe bloccare l'account admin.
           echo "### Server account attivo" >> "$GITHUB_STEP_SUMMARY"
           echo "URL: \`$URL\`" >> "$GITHUB_STEP_SUMMARY"

@@ -48,15 +48,18 @@ struct LoginView: View {
         }
         .foregroundStyle(.white)
         .overlay(alignment: .topTrailing) {
-            Button { showServer = true } label: {
-                Image(systemName: "server.rack")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(width: 42, height: 42)
+            // Il server è incluso nell'app: non si può cambiare (niente accesso locale aggirando gli account)
+            if auth.canChangeServer {
+                Button { showServer = true } label: {
+                    Image(systemName: "server.rack")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 42, height: 42)
+                }
+                .buttonStyle(GlassButtonStyle(shape: AnyShape(Circle())))
+                .padding(.trailing, 18)
+                .padding(.top, 6)
+                .accessibilityLabel("Server account")
             }
-            .buttonStyle(GlassButtonStyle(shape: AnyShape(Circle())))
-            .padding(.trailing, 18)
-            .padding(.top, 6)
-            .accessibilityLabel("Server account")
         }
         .sheet(isPresented: $showServer) { ServerSettingsSheet() }
         .animation(.snappy(duration: 0.3), value: mode)

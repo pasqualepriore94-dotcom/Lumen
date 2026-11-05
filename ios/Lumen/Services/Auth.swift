@@ -46,11 +46,17 @@ final class AuthStore {
         static let user = "lumen.currentUser"
         static let localAdminHash = "lumen.localAdminHash"
         static let token = "lumen.authToken"
+        static let mustChange = "lumen.mustChangePassword"
     }
 
     var user: AppUser? = nil
     var isRestoring = true
+    /// La password è quella predefinita (o troppo corta): va cambiata prima di usare l'app.
+    var mustChangePassword = false
     var serverURL: String { didSet { UserDefaults.standard.set(serverURL, forKey: Keys.server) } }
+    /// Server incluso nell'app: in quel caso non si può cambiare né usare l'accesso locale.
+    let bundledServer: String
+    var canChangeServer: Bool { bundledServer.isEmpty }
 
     var isLoggedIn: Bool { user != nil }
     var isAdmin: Bool { user?.isAdmin == true }
@@ -59,11 +65,21 @@ final class AuthStore {
     init() {
         let bundled = (Bundle.main.object(forInfoDictionaryKey: "AuthServerURL") as? String)?
             .trimmingCharacters(in: .whitespaces) ?? ""
-        serverURL = UserDefaults.standard.string(forKey: Keys.server) ?? (bundled.hasPrefix("http") ? bundled : "")
-        if let data = UserDefaults.standard.data(forKey: Keys.user),
-           let saved = try? JSONDecoder().decode(AppUser.self, from: data) {
+        bundledServer = bundled.hasPrefix("http") ? bundled : ""
+        // Con il server incluso nell'app si usa sempre quello: prima bastava svuotare l'indirizzo
+        // dalle impostazioni per entrare come admin locale con admin/admin.
+        serverURL = bundledServer.isEmpty ? (UserDefaults.standard.string(forKey: Keys.server) ?? "") : bundledServer
+        // Utente salvato nel portachiavi (prima nelle preferenze, modificabili da un backup)
+        if let json = Keychain.read(Keys.user), let saved = try? JSONDecoder().decode(AppUser.self, from: Data(json.utf8)) {
             user = saved
+        } else if let data = UserDefaults.standard.data(forKey: Keys.user),
+                  let saved = try? JSONDecoder().decode(AppUser.self, from: data) {
+            user = saved
+            if let json = String(data: data, encoding: .utf8) { Keychain.save(json, for: Keys.user) }
+            UserDefaults.standard.removeObject(forKey: Keys.user)
         }
+        if user?.id == "local-admin", !bundledServer.isEmpty { user = nil; Keychain.delete(Keys.user) }
+        mustChangePassword = UserDefaults.standard.bool(forKey: Keys.mustChange)
     }
 
     private var normalizedServer: String? {
@@ -105,6 +121,7 @@ final class AuthStore {
         let response: LoginResponse = try await request("/login", body: ["username": name, "password": password])
         Keychain.save(response.token, for: Keys.token)
         setUser(response.user)
+        setMustChange(response.mustChangePassword ?? false)
     }
 
     func register(username: String, email: String, password: String) async throws -> String {
@@ -127,18 +144,29 @@ final class AuthStore {
     }
 
     func changePassword(old: String, new: String) async throws {
-        guard new.count >= (hasServer ? 6 : 4) else { throw AuthError.server("La nuova password è troppo corta.") }
+        guard new.count >= 8 else { throw AuthError.server("La nuova password deve avere almeno 8 caratteri.") }
         if !hasServer {
             guard Self.sha(old) == localAdminHash else { throw AuthError.server("La password attuale non è corretta.") }
             UserDefaults.standard.set(Self.sha(new), forKey: Keys.localAdminHash)
+            setMustChange(false)
             return
         }
-        let _: OkResponse = try await request("/password", body: ["oldPassword": old, "newPassword": new], auth: true)
+        let r: OkResponse = try await request("/password", body: ["oldPassword": old, "newPassword": new], auth: true)
+        // Il server emette un nuovo token: quelli precedenti non valgono più
+        if let token = r.token { Keychain.save(token, for: Keys.token) }
+        setMustChange(false)
+    }
+
+    private func setMustChange(_ value: Bool) {
+        mustChangePassword = value
+        UserDefaults.standard.set(value, forKey: Keys.mustChange)
     }
 
     func signOut() {
         Keychain.delete(Keys.token)
+        Keychain.delete(Keys.user)
         UserDefaults.standard.removeObject(forKey: Keys.user)
+        setMustChange(false)
         user = nil
     }
 
@@ -174,14 +202,16 @@ final class AuthStore {
 
     private func setUser(_ u: AppUser) {
         user = u
-        if let data = try? JSONEncoder().encode(u) { UserDefaults.standard.set(data, forKey: Keys.user) }
+        if let data = try? JSONEncoder().encode(u), let json = String(data: data, encoding: .utf8) {
+            Keychain.save(json, for: Keys.user)
+        }
     }
 
-    private struct LoginResponse: Decodable { let token: String; let user: AppUser }
+    private struct LoginResponse: Decodable { let token: String; let user: AppUser; let mustChangePassword: Bool? }
     private struct RegisterResponse: Decodable { let message: String }
     private struct UserEnvelope: Decodable { let user: AppUser }
     private struct UsersResponse: Decodable { let users: [AppUser] }
-    private struct OkResponse: Decodable { let ok: Bool? }
+    private struct OkResponse: Decodable { let ok: Bool?; let token: String? }
     private struct ErrorResponse: Decodable { let error: String }
 
     private func request<T: Decodable>(_ path: String, method: String = "POST",
@@ -216,7 +246,8 @@ enum Keychain {
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecValueData as String: Data(value.utf8),
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+            // Solo su questo iPhone (non finisce nei backup né su altri dispositivi)
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
         SecItemAdd(query as CFDictionary, nil)
     }

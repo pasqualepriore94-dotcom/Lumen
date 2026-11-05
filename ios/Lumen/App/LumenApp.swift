@@ -107,6 +107,7 @@ struct RootView: View {
     @Environment(AppState.self) private var app
     @Environment(Library.self) private var library
     @Environment(UpdateChecker.self) private var updates
+    @Environment(AuthStore.self) private var auth
 
     var body: some View {
         @Bindable var app = app
@@ -152,6 +153,9 @@ struct RootView: View {
         }
         .overlay(alignment: .bottom) {
             AchievementToast().padding(.bottom, Theme.tabBarHeight + 12)
+        }
+        .fullScreenCover(isPresented: Binding(get: { auth.isLoggedIn && auth.mustChangePassword }, set: { _ in })) {
+            ForcePasswordChangeView()
         }
         .onOpenURL { url in
             if let request = ApprovalRequest(url: url) { app.approvalRequest = request }
@@ -325,6 +329,57 @@ struct ApprovalSheet: View {
                 failed = true
             }
             working = false
+        }
+    }
+}
+
+
+/// Prima di continuare va cambiata la password predefinita (es. admin/admin) o troppo corta.
+struct ForcePasswordChangeView: View {
+    @Environment(AppState.self) private var app
+    @Environment(AuthStore.self) private var auth
+    @State private var old = ""
+    @State private var new1 = ""
+    @State private var new2 = ""
+    @State private var error: String?
+    @State private var working = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    SecureField("Password attuale", text: $old)
+                    SecureField("Nuova password (almeno 8 caratteri)", text: $new1)
+                    SecureField("Ripeti la nuova password", text: $new2)
+                } footer: {
+                    Text("Per sicurezza la password attuale va sostituita: è quella predefinita o è troppo corta. Usa almeno 8 caratteri, meglio con lettere, numeri e simboli.")
+                }
+                if let error { Section { Text(error).foregroundStyle(.red) } }
+                Section {
+                    Button {
+                        Task { await save() }
+                    } label: {
+                        HStack { if working { ProgressView() }; Text("Cambia password").bold() }
+                    }
+                    .disabled(working || old.isEmpty || new1.count < 8 || new1 != new2)
+                    Button("Esci dall'account", role: .destructive) { auth.signOut() }
+                }
+            }
+            .navigationTitle("Cambia password")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .preferredColorScheme(.dark)
+        .interactiveDismissDisabled()
+    }
+
+    private func save() async {
+        working = true
+        defer { working = false }
+        do {
+            try await auth.changePassword(old: old, new: new1)
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
         }
     }
 }

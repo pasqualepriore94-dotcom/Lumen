@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.29.0",
+    "title": "Sicurezza",
+    "items": [
+      {
+        "icon": "lock.shield",
+        "text": "Accessi più sicuri: dopo 5 tentativi errati l'account si blocca per 15 minuti, e il server limita i tentativi da una stessa rete."
+      },
+      {
+        "icon": "key.fill",
+        "text": "La password predefinita dell'amministratore va cambiata al primo accesso; le nuove password devono avere almeno 8 caratteri."
+      },
+      {
+        "icon": "person.badge.shield.checkmark",
+        "text": "Cambiando password le sessioni aperte su altri dispositivi vengono chiuse. Dopo questo aggiornamento può essere necessario accedere di nuovo."
+      },
+      {
+        "icon": "checkmark.shield",
+        "text": "Corretti alcuni punti deboli dell'app individuati in un controllo di sicurezza."
+      }
+    ]
+  },
+  {
     "version": "0.28.0",
     "title": "Trailer a tutta pagina",
     "items": [

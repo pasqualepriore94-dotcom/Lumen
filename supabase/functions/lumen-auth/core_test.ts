@@ -42,10 +42,24 @@ Deno.test("flusso completo account", async () => {
   // admin/admin creato al primo avvio
   let r = await call("/login", { json: { username: "admin", password: "admin" } });
   assert(r.status === 200 && r.body.user.role === "admin", "login admin " + JSON.stringify(r));
+  assert(r.body.mustChangePassword === true, "password predefinita da cambiare");
+  const defaultToken = r.body.token;
+  r = await call("/users", { token: defaultToken });
+  assert(r.status === 403, "con la password predefinita niente funzioni admin");
+  r = await call("/password", { token: defaultToken, json: { oldPassword: "admin", newPassword: "corta" } });
+  assert(r.status === 400, "password nuova troppo corta");
+  r = await call("/password", { token: defaultToken, json: { oldPassword: "admin", newPassword: "Lumen-Admin-2026" } });
+  assert(r.status === 200 && typeof r.body.token === "string", "cambio password admin");
   const adminToken = r.body.token;
+  r = await call("/me", { token: defaultToken });
+  assert(r.status === 401, "il token di prima del cambio password non vale più");
+  r = await call("/me", { token: "abc.def.ghi" });
+  assert(r.status === 401, "token malformato → 401");
 
   r = await call("/login", { json: { username: "admin", password: "sbagliata" } });
   assert(r.status === 401, "password errata deve dare 401");
+  r = await call("/register", { json: { username: "evil", email: "<img/src=x/onerror=alert(1)>@x.io", password: "segreta12" } });
+  assert(r.status === 400, "email con HTML rifiutata");
 
   // registrazione → email all'admin con link
   r = await call("/register", { json: { username: "Mario.Rossi", email: "mario@example.com", password: "segreta1" } });
@@ -115,4 +129,28 @@ Deno.test("flusso completo account", async () => {
   // token manomesso
   r = await call("/me", { token: adminToken.slice(0, -2) + "xx" });
   assert(r.status === 401, "token manomesso");
+});
+
+Deno.test("blocco dopo tentativi errati e limite per IP", async () => {
+  const { resetRateLimits } = await import("./core.ts");
+  resetRateLimits();
+  const d: Deps = { ...deps, store: memoryStore() };
+  const post = (path: string, body: unknown) => handle(new Request(BASE + path, {
+    method: "POST", headers: { "Content-Type": "application/json", "x-forwarded-for": "10.0.0." + Math.floor(Math.random() * 200) },
+    body: JSON.stringify(body) }), d);
+  for (let i = 0; i < 5; i++) {
+    const r = await post("/login", { username: "admin", password: "sbagliata" + i });
+    assert(r.status === 401, "tentativo errato " + i);
+  }
+  const locked = await post("/login", { username: "admin", password: "admin" });
+  assert(locked.status === 429, "account bloccato dopo 5 errori, anche con la password giusta");
+  resetRateLimits();
+  let last = 0;
+  for (let i = 0; i < 22; i++) {
+    const r = await handle(new Request(BASE + "/login", { method: "POST",
+      headers: { "Content-Type": "application/json", "x-forwarded-for": "1.2.3.4" },
+      body: JSON.stringify({ username: "nessuno", password: "x" }) }), d);
+    last = r.status;
+  }
+  assert(last === 429, "limite di tentativi per IP");
 });

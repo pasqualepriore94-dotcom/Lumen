@@ -11,10 +11,13 @@ struct TrailerPlayerView: View {
 
     static func videoId(from url: URL) -> String? {
         let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        if let v = comps?.queryItems?.first(where: { $0.name == "v" })?.value { return v }
-        if url.host?.contains("youtu.be") == true { return url.lastPathComponent }
-        if url.path.contains("/embed/") { return url.lastPathComponent }
-        return nil
+        var id: String?
+        if let v = comps?.queryItems?.first(where: { $0.name == "v" })?.value { id = v }
+        else if url.host?.contains("youtu.be") == true { id = url.lastPathComponent }
+        else if url.path.contains("/embed/") { id = url.lastPathComponent }
+        // Solo identificativi YouTube validi: il valore finisce nel codice della pagina del player
+        guard let id, id.range(of: #"^[A-Za-z0-9_-]{6,20}$"#, options: .regularExpression) != nil else { return nil }
+        return id
     }
 
     var body: some View {

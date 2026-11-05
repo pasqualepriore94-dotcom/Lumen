@@ -12,6 +12,8 @@ export interface UserRow {
   approval_token: string | null;
   created_at: string;
   approved_at: string | null;
+  failed_logins?: number;
+  locked_until?: string | null;
 }
 
 export type NewUser = Omit<UserRow, "id" | "created_at">;
@@ -46,7 +48,12 @@ export interface Deps {
 }
 
 const enc = new TextEncoder();
-const ITERATIONS = 100_000;
+const ITERATIONS = 210_000;          // PBKDF2-SHA256 (raccomandazione OWASP); hash vecchi aggiornati al login
+const MIN_PASSWORD = 8;
+const DEFAULT_ADMIN_PASSWORD = "admin";
+const MAX_FAILED = 5;                 // tentativi errati prima del blocco
+const LOCK_MINUTES = 15;
+const MAX_PENDING = 100;              // registrazioni in attesa oltre le quali si rifiutano le nuove
 
 // ---------- utilità ----------
 
@@ -100,14 +107,47 @@ export async function signJWT(payload: Record<string, unknown>, secret: string):
 }
 
 export async function verifyJWT(token: string, secret: string): Promise<Record<string, unknown> | null> {
-  const parts = token.split(".");
-  if (parts.length !== 3) return null;
-  const ok = await crypto.subtle.verify("HMAC", await hmacKey(secret), b64urlDecode(parts[2]),
-    enc.encode(`${parts[0]}.${parts[1]}`));
-  if (!ok) return null;
-  const payload = JSON.parse(new TextDecoder().decode(b64urlDecode(parts[1])));
-  if (typeof payload.exp === "number" && payload.exp < Date.now() / 1000) return null;
-  return payload;
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3 || secret.length < 32) return null;
+    const header = JSON.parse(new TextDecoder().decode(b64urlDecode(parts[0])));
+    if (header?.alg !== "HS256") return null;
+    const ok = await crypto.subtle.verify("HMAC", await hmacKey(secret), b64urlDecode(parts[2]),
+      enc.encode(`${parts[0]}.${parts[1]}`));
+    if (!ok) return null;
+    const payload = JSON.parse(new TextDecoder().decode(b64urlDecode(parts[1])));
+    // La scadenza è obbligatoria
+    if (typeof payload?.exp !== "number" || payload.exp < Date.now() / 1000) return null;
+    return payload;
+  } catch {
+    return null;   // token malformato
+  }
+}
+
+/** Impronta della password attuale: cambiando password i token emessi prima smettono di valere. */
+async function passwordVersion(hash: string): Promise<string> {
+  const d = await crypto.subtle.digest("SHA-256", enc.encode("pv:" + hash));
+  return b64url(new Uint8Array(d)).slice(0, 12);
+}
+
+// ---------- limite di richieste (per indirizzo IP, per istanza della funzione) ----------
+
+const hits = new Map<string, number[]>();
+
+/** Solo per i test. */
+export function resetRateLimits() { hits.clear(); adminChecked = false; }
+
+export function rateLimited(key: string, max: number, windowSeconds: number): boolean {
+  const now = Date.now();
+  const list = (hits.get(key) ?? []).filter((t) => now - t < windowSeconds * 1000);
+  list.push(now);
+  hits.set(key, list);
+  if (hits.size > 5000) for (const k of [...hits.keys()].slice(0, 1000)) hits.delete(k);
+  return list.length > max;
+}
+
+function clientIp(req: Request): string {
+  return (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || req.headers.get("x-real-ip") || "unknown";
 }
 
 const CORS = {
@@ -159,20 +199,24 @@ function publicUser(u: UserRow) {
 }
 
 const USERNAME_RE = /^[a-z0-9._-]{3,30}$/;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+// Niente caratteri HTML/virgolette: l'email compare anche nei pannelli di amministrazione
+const EMAIL_RE = /^[^\s@<>"'`]{1,64}@[^\s@<>"'`]{1,190}\.[^\s@<>"'`]{2,}$/;
 
 // ---------- amministratore iniziale ----------
 
 /** Crea l'account admin/admin al primo utilizzo, se non esiste ancora un amministratore. */
+let adminChecked = false;
+
 export async function ensureAdmin(deps: Deps): Promise<void> {
+  if (adminChecked) return;
   const existing = await deps.store.findByUsername("admin");
-  if (existing) return;
+  if (existing) { adminChecked = true; return; }
   const users = await deps.store.list();
   if (users.some((u) => u.role === "admin")) return;
   await deps.store.insert({
     username: "admin",
     email: deps.env.adminEmail.toLowerCase(),
-    password_hash: await hashPassword("admin"),
+    password_hash: await hashPassword(DEFAULT_ADMIN_PASSWORD),
     role: "admin",
     approved: true,
     approval_token: null,
@@ -180,12 +224,15 @@ export async function ensureAdmin(deps: Deps): Promise<void> {
   });
 }
 
-async function issueToken(u: UserRow, env: Env): Promise<string> {
+async function issueToken(u: UserRow, env: Env, mustChange = false): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  return signJWT({ sub: u.id, username: u.username, role: u.role, iat: now, exp: now + 60 * 60 * 24 * 30 }, env.jwtSecret);
+  return signJWT({ sub: u.id, username: u.username, role: u.role, pv: await passwordVersion(u.password_hash),
+                   mcp: mustChange || undefined, iat: now, exp: now + 60 * 60 * 24 * 14 }, env.jwtSecret);
 }
 
-async function currentUser(req: Request, deps: Deps): Promise<UserRow | null> {
+interface Session { user: UserRow; mustChangePassword: boolean }
+
+async function currentSession(req: Request, deps: Deps): Promise<Session | null> {
   const auth = req.headers.get("authorization") ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   if (!token) return null;
@@ -193,7 +240,13 @@ async function currentUser(req: Request, deps: Deps): Promise<UserRow | null> {
   if (!payload || typeof payload.sub !== "string") return null;
   const user = await deps.store.findById(payload.sub);
   if (!user || !user.approved) return null;
-  return user;
+  // Password cambiata dopo l'emissione del token → token non più valido
+  if (payload.pv !== await passwordVersion(user.password_hash)) return null;
+  return { user, mustChangePassword: payload.mcp === true };
+}
+
+async function currentUser(req: Request, deps: Deps): Promise<UserRow | null> {
+  return (await currentSession(req, deps))?.user ?? null;
 }
 
 async function readBody(req: Request): Promise<Record<string, unknown>> {
@@ -237,14 +290,23 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     await ensureAdmin(deps);
 
     // Registrazione: l'account resta disattivo finché l'admin non clicca il link ricevuto via email.
+    if (env.jwtSecret.length < 32 && route !== "/" && route !== "/health") {
+      return fail(503, "Server account non configurato correttamente.");
+    }
+
     if (route === "/register" && req.method === "POST") {
+      if (rateLimited("reg:" + clientIp(req), 5, 3600)) return fail(429, "Troppe registrazioni da questa rete: riprova più tardi.");
       const b = await readBody(req);
       const username = String(b.username ?? "").trim().toLowerCase();
       const email = String(b.email ?? "").trim().toLowerCase();
       const password = String(b.password ?? "");
       if (!USERNAME_RE.test(username)) return fail(400, "Username non valido: 3-30 caratteri tra lettere minuscole, numeri, punto, trattino.");
       if (!EMAIL_RE.test(email)) return fail(400, "Indirizzo email non valido.");
-      if (password.length < 6) return fail(400, "La password deve avere almeno 6 caratteri.");
+      if (password.length < MIN_PASSWORD) return fail(400, `La password deve avere almeno ${MIN_PASSWORD} caratteri.`);
+      if (password.length > 200) return fail(400, "Password troppo lunga.");
+      if ((await store.list()).filter((u) => !u.approved && u.approval_token).length >= MAX_PENDING) {
+        return fail(503, "Troppe registrazioni in attesa: riprova più tardi.");
+      }
       if (await store.findByUsername(username)) return fail(409, "Username già in uso.");
       if (await store.findByEmail(email)) return fail(409, "Esiste già un account con questa email.");
       const user = await store.insert({
@@ -283,6 +345,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
 
     // Conferma dall'app (dopo il link): attiva o rifiuta la registrazione.
     if (route === "/approve" && req.method === "POST") {
+      if (rateLimited("apr:" + clientIp(req), 20, 600)) return fail(429, "Troppi tentativi: riprova più tardi.");
       const b = await readBody(req);
       const token = String(b.token ?? "");
       const action = b.action === "reject" ? "reject" : "approve";
@@ -301,15 +364,34 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     }
 
     if (route === "/login" && req.method === "POST") {
+      if (rateLimited("login:" + clientIp(req), 20, 600)) return fail(429, "Troppi tentativi di accesso: riprova tra qualche minuto.");
       const b = await readBody(req);
-      const login = String(b.username ?? "").trim().toLowerCase();
-      const password = String(b.password ?? "");
+      const login = String(b.username ?? "").trim().toLowerCase().slice(0, 200);
+      const password = String(b.password ?? "").slice(0, 200);
       const user = login.includes("@") ? await store.findByEmail(login) : await store.findByUsername(login);
+      if (user?.locked_until && new Date(user.locked_until).getTime() > Date.now()) {
+        const min = Math.ceil((new Date(user.locked_until).getTime() - Date.now()) / 60000);
+        return fail(429, `Account bloccato per troppi tentativi errati: riprova tra ${min} minuti.`);
+      }
       if (!user || !(await verifyPassword(password, user.password_hash))) {
+        if (user) {
+          const failed = (user.failed_logins ?? 0) + 1;
+          await store.update(user.id, failed >= MAX_FAILED
+            ? { failed_logins: 0, locked_until: new Date(Date.now() + LOCK_MINUTES * 60000).toISOString() }
+            : { failed_logins: failed });
+        }
         return fail(401, "Username o password errati.");
       }
       if (!user.approved) return fail(403, "Account in attesa di attivazione da parte dell'amministratore.");
-      return json(200, { token: await issueToken(user, env), user: publicUser(user) });
+      let fresh = user;
+      const patch: Partial<UserRow> = {};
+      if ((user.failed_logins ?? 0) > 0 || user.locked_until) { patch.failed_logins = 0; patch.locked_until = null; }
+      // Hash con meno iterazioni di quelle attuali: aggiornato ora che conosciamo la password
+      if (Number(user.password_hash.split("$")[1]) < ITERATIONS) patch.password_hash = await hashPassword(password);
+      if (Object.keys(patch).length) fresh = await store.update(user.id, patch);
+      // Password predefinita (admin/admin): va cambiata prima di poter usare le funzioni di amministrazione
+      const mustChange = password === DEFAULT_ADMIN_PASSWORD || password.length < MIN_PASSWORD;
+      return json(200, { token: await issueToken(fresh, env, mustChange), user: publicUser(fresh), mustChangePassword: mustChange });
     }
 
     if (route === "/me" && req.method === "GET") {
@@ -319,21 +401,27 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     }
 
     if (route === "/password" && req.method === "POST") {
+      if (rateLimited("pwd:" + clientIp(req), 10, 600)) return fail(429, "Troppi tentativi: riprova tra qualche minuto.");
       const user = await currentUser(req, deps);
       if (!user) return fail(401, "Sessione scaduta: accedi di nuovo.");
       const b = await readBody(req);
       if (!(await verifyPassword(String(b.oldPassword ?? ""), user.password_hash))) return fail(400, "La password attuale non è corretta.");
       const next = String(b.newPassword ?? "");
-      if (next.length < 6) return fail(400, "La nuova password deve avere almeno 6 caratteri.");
-      await store.update(user.id, { password_hash: await hashPassword(next) });
-      return json(200, { ok: true });
+      if (next.length < MIN_PASSWORD) return fail(400, `La nuova password deve avere almeno ${MIN_PASSWORD} caratteri.`);
+      if (next.length > 200) return fail(400, "Password troppo lunga.");
+      if (next === DEFAULT_ADMIN_PASSWORD || next.toLowerCase() === user.username) return fail(400, "Scegli una password diversa dal nome utente.");
+      const updated = await store.update(user.id, { password_hash: await hashPassword(next) });
+      // Nuovo token (quelli vecchi non valgono più)
+      return json(200, { ok: true, token: await issueToken(updated, env) });
     }
 
     // ---- solo amministratori ----
     if (route === "/users" || route.startsWith("/users/")) {
-      const me = await currentUser(req, deps);
-      if (!me) return fail(401, "Sessione scaduta: accedi di nuovo.");
+      const session = await currentSession(req, deps);
+      if (!session) return fail(401, "Sessione scaduta: accedi di nuovo.");
+      const me = session.user;
       if (me.role !== "admin") return fail(403, "Riservato agli amministratori.");
+      if (session.mustChangePassword) return fail(403, "Cambia prima la password predefinita dell'amministratore.");
 
       if (route === "/users" && req.method === "GET") {
         const users = (await store.list()).sort((a, b) =>
@@ -367,7 +455,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
             break;
           case "resetPassword": {
             const temp = String(b.newPassword ?? "");
-            if (temp.length < 6) return fail(400, "La password deve avere almeno 6 caratteri.");
+            if (temp.length < MIN_PASSWORD) return fail(400, `La password deve avere almeno ${MIN_PASSWORD} caratteri.`);
             patch = { password_hash: await hashPassword(temp) };
             break;
           }
