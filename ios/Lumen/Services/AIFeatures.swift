@@ -241,7 +241,7 @@ final class PersonalRows {
         if let data = try? Data(contentsOf: file), let s = try? JSONDecoder().decode(Saved.self, from: data) {
             storedRows = s.rows
             // Le righe salvate con la versione precedente (8 titoli) vengono rigenerate più lunghe.
-            savedDate = s.rows.contains { $0.items.count > 12 } ? s.date : nil = s.date
+            savedDate = s.rows.contains { $0.items.count > 12 } ? s.date : nil
             savedSignature = s.signature
         }
     }
