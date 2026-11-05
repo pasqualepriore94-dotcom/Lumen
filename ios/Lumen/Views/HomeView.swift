@@ -54,6 +54,11 @@ struct HomeView: View {
                             SectionRow(section: CatalogSection(id: "other-series", title: "Altre serie", style: nil, items: custom.otherSeries))
                                 .id("other-series")
                         }
+                        let docs = custom.documentaryItems.filter(matches)
+                        if !docs.isEmpty {
+                            SectionRow(section: CatalogSection(id: "my-docs", title: "Documentari dalla tua playlist", style: nil, items: docs))
+                                .id("my-docs")
+                        }
                         if activeFilter == nil, !custom.courseItems.isEmpty {
                             SectionRow(section: CatalogSection(id: "courses", title: "Corsi", style: nil, items: custom.courseItems))
                                 .id("courses")
@@ -128,6 +133,12 @@ struct HomeView: View {
                     if !LinkLibrary.shared.courseItems.isEmpty {
                         Button("Corsi (\(LinkLibrary.shared.courseItems.count))", systemImage: "graduationcap") {
                             withAnimation { proxy.scrollTo("courses", anchor: .top) }
+                        }
+                    }
+                    if !LinkLibrary.shared.documentaryItems.isEmpty {
+                        Button("Documentari (\(LinkLibrary.shared.documentaryItems.count))", systemImage: "film.stack") {
+                            if activeFilter != nil { activeFilter = nil }
+                            withAnimation { proxy.scrollTo("my-docs", anchor: .top) }
                         }
                     }
                     if !LinkLibrary.shared.customItems.isEmpty {

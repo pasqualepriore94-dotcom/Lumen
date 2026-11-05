@@ -212,5 +212,6 @@ extension LinkLibrary {
         }
         applyBatch(movies: movieLinks, series: seriesLinks, unmatched: unmatched)
         autoAddCourses()
+        autoAddDocumentaries()
     }
 }

@@ -117,13 +117,39 @@ final class PlaylistStore {
 
     /// Abbina le nuove voci al catalogo (riusando le ricerche già fatte) e le importa direttamente,
     /// poi mostra la finestra con i contenuti aggiunti (salvata anche tra le notifiche).
-    private func autoImport(_ added: [LinkMedia], playlistName: String, app: AppState) async {
+    /// Una tantum (e dopo ogni nuova playlist): cerca i documentari già presenti nelle playlist salvate
+    /// che non sono ancora nel catalogo, li abbina a TMDB e li aggiunge alla categoria Documentari.
+    func scanDocumentaries(app: AppState, force: Bool = false) async {
+        let key = "lumen.docScan.v1"
+        let signature = playlists.map { $0.id.uuidString + "\($0.entries)" }.sorted().joined(separator: ",")
+        guard force || UserDefaults.standard.string(forKey: key) != signature, !playlists.isEmpty else { return }
+        let linked = LinkLibrary.shared.allLinkedIds
+        var docs: [LinkMedia] = []
+        var names: [String] = []
+        for p in playlists {
+            let list = await mediaAsync(of: p)
+            let found = await Task.detached(priority: .utility) {
+                list.filter { !$0.isLive && !linked.contains($0.id) && LinkLibrary.isDocumentary($0)
+                    && !LinkLibrary.isCourse($0.title + " " + ($0.group ?? "")) }
+            }.value
+            if !found.isEmpty { docs += found; names.append(p.name) }
+        }
+        UserDefaults.standard.set(signature, forKey: key)
+        guard !docs.isEmpty else { return }
+        await autoImport(docs, playlistName: names.joined(separator: ", "), app: app, documentaries: true)
+    }
+
+    private func autoImport(_ added: [LinkMedia], playlistName: String, app: AppState, documentaries: Bool = false) async {
         let tmdb = app.config.providers.first { $0.type == .tmdb && $0.isUsable }.map { TMDBProvider(config: $0) }
         let mapper = LinkMapper()
         mapper.cache = ImportJob.shared.mapper.cache
         await mapper.prepare(added, tmdb: tmdb)
         ImportJob.shared.mapper.cache.merge(mapper.cache) { _, new in new }
         LinkLibrary.shared.applyMapping(movies: mapper.movies, series: mapper.series, lives: mapper.lives)
+        if documentaries {
+            // Le schede abbinate entrano tra i documentari anche se TMDB non le etichetta come tali.
+            LinkLibrary.shared.markDocumentaries(mapper.movies.compactMap(\.match).map(\.id) + mapper.series.compactMap(\.match).map(\.id))
+        }
 
         let movies = mapper.movies.compactMap(\.match)
         let series = mapper.series.compactMap { s in s.match.map { (s, $0) } }
@@ -142,7 +168,10 @@ final class PlaylistStore {
             rows.append(AnnouncementItem(icon: "dot.radiowaves.left.and.right", text: lives == 1 ? "1 nuova diretta" : "\(lives) nuove dirette",
                                          detail: "In Categorie → Dirette"))
         }
-        if unmatched > 0 {
+        if unmatched > 0 && documentaries {
+            rows.append(AnnouncementItem(icon: "film.stack", text: "\(unmatched) documentari senza scheda TMDB",
+                                         detail: "Aggiunti comunque in Categorie → Documentari"))
+        } else if unmatched > 0 {
             rows.append(AnnouncementItem(icon: "questionmark.folder", text: "\(unmatched) voci senza scheda nel catalogo",
                                          detail: "In Amministrazione → Contenuti collegati da link"))
         }
@@ -151,11 +180,13 @@ final class PlaylistStore {
         let count = seen.count
         let n = AppNotification(
             kind: .contentAdded,
-            title: count > 0 ? (count == 1 ? "1 nuovo titolo aggiunto" : "\(count) nuovi titoli aggiunti") : "Nuovi contenuti aggiunti",
+            title: documentaries
+                ? (count + unmatched == 1 ? "1 documentario aggiunto" : "\(count + unmatched) documentari aggiunti")
+                : (count > 0 ? (count == 1 ? "1 nuovo titolo aggiunto" : "\(count) nuovi titoli aggiunti") : "Nuovi contenuti aggiunti"),
             body: rows.prefix(12).map { "• " + $0.text }.joined(separator: "\n"),
-            icon: "sparkles.tv",
+            icon: documentaries ? "film.stack" : "sparkles.tv",
             items: shown,
-            subtitle: "Da \(playlistName)" + (rows.count > shown.count ? " · altri \(rows.count - shown.count) nel catalogo" : ""))
+            subtitle: (documentaries ? "Trovati in " : "Da ") + playlistName + (rows.count > shown.count ? " · altri \(rows.count - shown.count) nel catalogo" : ""))
         NotificationStore.shared.post(n)
         if UIApplication.shared.applicationState == .active {
             if app.announcement == nil { app.announcement = n }

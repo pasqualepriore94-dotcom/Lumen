@@ -47,6 +47,14 @@ struct TMDBProvider: ContentProvider {
                  query: ["with_genres": "80", "sort_by": "popularity.desc"], kind: .series),
             Spec(id: "docs", title: "Documentari", style: "wide", path: "/discover/movie",
                  query: ["with_genres": "99", "sort_by": "popularity.desc"], kind: .movie),
+            Spec(id: "docs-tv", title: "Docuserie", style: "poster", path: "/discover/tv",
+                 query: ["with_genres": "99", "sort_by": "popularity.desc"], kind: .series),
+            Spec(id: "docs-crime", title: "Documentari true crime", style: "poster", path: "/discover/tv",
+                 query: ["with_genres": "99,80", "sort_by": "popularity.desc"], kind: .series),
+            Spec(id: "docs-history", title: "Documentari di storia", style: "poster", path: "/discover/movie",
+                 query: ["with_genres": "99,36", "sort_by": "popularity.desc"], kind: .movie),
+            Spec(id: "docs-music", title: "Documentari musicali", style: "poster", path: "/discover/movie",
+                 query: ["with_genres": "99,10402", "sort_by": "popularity.desc"], kind: .movie),
             Spec(id: "upcoming", title: "Prossimamente", style: "wide", path: "/movie/upcoming", query: ["region": region], kind: .movie, badge: "In arrivo"),
         ]
 

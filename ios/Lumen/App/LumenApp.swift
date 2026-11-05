@@ -65,6 +65,9 @@ struct LumenApp: App {
                         Task {
                             try? await Task.sleep(for: .seconds(6))
                             await PlaylistStore.shared.checkForUpdates(app: app)
+                            // Documentari già presenti nelle playlist ma non ancora nel catalogo.
+                            while !LinkLibrary.shared.isLoaded { try? await Task.sleep(for: .seconds(1)) }
+                            await PlaylistStore.shared.scanDocumentaries(app: app)
                         }
                     }
                 }

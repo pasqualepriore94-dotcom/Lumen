@@ -361,6 +361,7 @@ final class LinkLibrary {
         }
         isLoaded = true
         autoAddCourses()
+        autoAddDocumentaries()
     }
 
     nonisolated private static var matchesFile: URL {
@@ -545,7 +546,7 @@ final class LinkLibrary {
     func addCustomSeries(_ list: [(name: String, year: Int?, poster: URL?, episodes: [String: LinkMedia])], overview: String? = nil) {
         removeLinks(Set(list.flatMap { $0.episodes.values.map(\.id) }))
         for s in list {
-            let text = overview.map { "\($0) · \(s.episodes.count) lezioni" } ?? "Aggiunta dalla playlist"
+            let text = overview.map { "\($0) · \(s.episodes.count) \($0 == "Corso" ? "lezioni" : "episodi")" } ?? "Aggiunta dalla playlist"
             let item = MediaItem(id: Self.customId(s.name, series: true), title: s.name, kind: .series,
                                  poster: s.poster, backdrop: s.poster, overview: text, year: s.year)
             setEpisodeLinks(s.episodes, for: item)
@@ -578,8 +579,72 @@ final class LinkLibrary {
     /// Categoria "Corsi": contenuti formativi aggiunti dalla playlist.
     var courseItems: [MediaItem] { customItems.filter { Self.isCourseItem($0) } }
     /// "Altri film" / "Altre serie": contenuti senza scheda che non sono corsi.
-    var otherMovies: [MediaItem] { customItems.filter { !$0.isSeries && !Self.isCourseItem($0) } }
-    var otherSeries: [MediaItem] { customItems.filter { $0.isSeries && !Self.isCourseItem($0) } }
+    var otherMovies: [MediaItem] { customItems.filter { !$0.isSeries && !Self.isCourseItem($0) && !Self.isDocumentaryItem($0) } }
+    var otherSeries: [MediaItem] { customItems.filter { $0.isSeries && !Self.isCourseItem($0) && !Self.isDocumentaryItem($0) } }
+
+    nonisolated static let docWords = ["documentar", "documentary", "docuserie", "docu-serie", "docufilm", "docu film",
+                                       "docu ", "|docu", "doc:", "inchiesta", "reportage"]
+
+    /// Voce della playlist che sembra un documentario (dal gruppo o dal titolo).
+    nonisolated static func isDocumentary(_ m: LinkMedia) -> Bool {
+        let t = " " + (m.title + " " + (m.group ?? "")).lowercased() + " "
+        return docWords.contains { t.contains($0) }
+    }
+
+    static func isDocumentaryItem(_ item: MediaItem) -> Bool {
+        (item.overview ?? "").hasPrefix("Documentario") ||
+        (item.tags ?? []).contains { $0.lowercased().hasPrefix("document") }
+    }
+
+    /// Schede abbinate dalla ricerca documentari (anche se TMDB non le etichetta "Documentario").
+    @ObservationIgnored private var docIds = Set(UserDefaults.standard.stringArray(forKey: "lumen.docIds") ?? [])
+
+    func markDocumentaries(_ ids: [String]) {
+        guard !ids.isEmpty else { return }
+        docIds.formUnion(ids)
+        UserDefaults.standard.set(Array(docIds), forKey: "lumen.docIds")
+        saveMatches()
+    }
+
+    @ObservationIgnored private var docCache: (version: Int, items: [MediaItem]) = (-1, [])
+
+    /// Documentari guardabili in Lumen (abbinati al catalogo o aggiunti dalla playlist).
+    var documentaryItems: [MediaItem] {
+        _ = matchedItems.count
+        if docCache.version != matchesVersion {
+            docCache = (matchesVersion, matchedItems.values.filter { docIds.contains($0.id) || Self.isDocumentaryItem($0) }
+                .sorted { $0.title.localizedCompare($1.title) == .orderedAscending })
+        }
+        return docCache.items
+    }
+
+    /// I documentari della playlist rimasti senza scheda vengono aggiunti comunque (categoria Documentari).
+    func autoAddDocumentaries() {
+        let docs = items.filter { !$0.isLive && Self.isDocumentary($0) && !Self.isCourse($0.title + " " + ($0.group ?? "")) }
+        guard !docs.isEmpty else { return }
+        var movies: [LinkMedia] = []
+        var series: [String: (year: Int?, poster: URL?, episodes: [String: LinkMedia])] = [:]
+        for m in docs {
+            let p = ParsedTitle.parse(m.title)
+            if let s = p.season, let e = p.episode {
+                var entry = series[p.title] ?? (p.year, m.poster, [:])
+                entry.episodes["s\(s)e\(e)"] = m
+                if entry.poster == nil { entry.poster = m.poster }
+                series[p.title] = entry
+            } else {
+                movies.append(m)
+            }
+        }
+        removeLinks(Set(movies.map(\.id)))
+        for media in movies {
+            let p = ParsedTitle.parse(media.title)
+            let item = MediaItem(id: Self.customId(p.title, series: false), title: p.title, kind: .movie,
+                                 poster: media.poster, backdrop: media.poster, overview: "Documentario · dalla playlist", year: p.year)
+            setMovieLink(media, for: item)
+        }
+        addCustomSeries(series.map { (name: $0.key, year: $0.value.year, poster: $0.value.poster, episodes: $0.value.episodes) },
+                        overview: "Documentario")
+    }
 
     nonisolated static let courseWords = ["corso", "corsi", "course", "lezione", "lezioni", "lesson", "tutorial",
                                           "masterclass", "formazione", "webinar", "udemy", "videocorso"]

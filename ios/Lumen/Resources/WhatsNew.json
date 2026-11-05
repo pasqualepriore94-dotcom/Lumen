@@ -1,5 +1,23 @@
 [
   {
+    "version": "0.30.0",
+    "title": "Documentari",
+    "items": [
+      {
+        "icon": "film.stack",
+        "text": "Lumen riconosce i documentari nelle tue playlist (dal gruppo o dal titolo), li abbina alle schede TMDB e li aggiunge da solo: li trovi nella riga «Documentari dalla tua playlist» e in Categorie → Documentari."
+      },
+      {
+        "icon": "sparkles",
+        "text": "Alla prima apertura cerca i documentari già presenti nella playlist caricata e ti mostra quanti ne ha aggiunti. Quelli senza scheda TMDB vengono aggiunti comunque, con titolo e locandina della playlist."
+      },
+      {
+        "icon": "rectangle.stack",
+        "text": "Nuove righe nella Home: Docuserie, Documentari true crime, di storia e musicali."
+      }
+    ]
+  },
+  {
     "version": "0.29.1",
     "title": "Trailer più pulito",
     "items": [
