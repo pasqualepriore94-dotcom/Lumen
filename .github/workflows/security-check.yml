@@ -1,0 +1,63 @@
+name: Controllo sicurezza (server account e file pubblici)
+
+# Prove dall'esterno sul sistema pubblicato: non modifica nulla e non usa l'account admin
+# (nessun tentativo di accesso con il suo nome, per non farlo bloccare).
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/security-check.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - name: Prove
+        run: |
+          set -u
+          URL="https://$PROJECT_REF.supabase.co/functions/v1/lumen-auth"
+          REST="https://$PROJECT_REF.supabase.co/rest/v1"
+          PASS=0; FAILN=0
+          check() { # descrizione, atteso, ottenuto
+            if [ "$2" = "$3" ]; then echo "OK   $1 ($3)"; PASS=$((PASS+1)); else echo "FAIL $1 (atteso $2, ottenuto $3)"; FAILN=$((FAILN+1)); fi
+          }
+          code() { curl -s -o /dev/null -w "%{http_code}" "$@"; }
+
+          check "Server raggiungibile" 200 "$(code "$URL/health")"
+          check "Lista utenti senza login" 401 "$(code "$URL/users")"
+          check "Token falso" 401 "$(code -H 'Authorization: Bearer abc.def.ghi' "$URL/me")"
+          FAKE=$(printf '{"alg":"none","typ":"JWT"}' | base64 -w0 | tr '+/' '-_' | tr -d '=').$(printf '{"sub":"x","role":"admin","exp":9999999999}' | base64 -w0 | tr '+/' '-_' | tr -d '=').
+          check "Token senza firma (alg none)" 401 "$(code -H "Authorization: Bearer $FAKE" "$URL/users")"
+          check "Accesso utente inesistente" 401 "$(code -X POST -H 'Content-Type: application/json' -d '{"username":"nessuno.test","password":"sbagliata"}' "$URL/login")"
+          check "Registrazione con HTML nell'email" 400 "$(code -X POST -H 'Content-Type: application/json' -d '{"username":"test.xss","email":"<img/src=x/onerror=alert(1)>@x.io","password":"Abcdefgh1"}' "$URL/register")"
+          check "Registrazione con password corta" 400 "$(code -X POST -H 'Content-Type: application/json' -d '{"username":"test.short","email":"short@example.com","password":"123"}' "$URL/register")"
+          check "Conferma attivazione con token falso" 400 "$(code -X POST -H 'Content-Type: application/json' -d '{"token":"falso","action":"approve"}' "$URL/approve")"
+          LOC=$(curl -s -o /dev/null -w "%{redirect_url}" "$URL/approve?token=falso&action=approve")
+          case "$LOC" in lumen://approve*invalid=1*) check "Link di attivazione falso → app con 'non valido'" ok ok ;; *) check "Link di attivazione falso" "lumen://…invalid=1" "$LOC" ;; esac
+
+          # Limite per IP: 25 tentativi di accesso con un utente inesistente
+          LAST=0
+          for i in $(seq 1 25); do LAST=$(code -X POST -H 'Content-Type: application/json' -d '{"username":"nessuno.test","password":"x"}' "$URL/login"); done
+          check "Limite tentativi di accesso dalla stessa rete" 429 "$LAST"
+
+          # Tabella utenti non leggibile con la chiave pubblica (anon)
+          ANON=$(curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" "https://api.supabase.com/v1/projects/$PROJECT_REF/api-keys?reveal=true" \
+            | python3 -c "import sys,json;print(next((k.get('api_key','') for k in json.load(sys.stdin) if k.get('name')=='anon' or k.get('type')=='publishable'),''))")
+          BODY=$(curl -s -H "apikey: $ANON" -H "Authorization: Bearer $ANON" "$REST/lumen_users?select=username,password_hash&limit=1")
+          case "$BODY" in "[]"|*"permission denied"*|*"42501"*|*"Invalid API key"*) check "Tabella utenti protetta dalla chiave pubblica" ok ok ;; *) check "Tabella utenti protetta" "[] o permesso negato" "$(echo "$BODY" | head -c 120)" ;; esac
+
+          # File pubblici: niente segreti oltre alle chiavi di sola lettura del catalogo
+          CFG=$(curl -s "https://$PROJECT_REF.supabase.co/storage/v1/object/public/lumen/app-config.json")
+          if echo "$CFG" | grep -qiE 'service_role|sbp_|re_[A-Za-z0-9]{10}|password'; then check "Configurazione pubblica senza segreti" ok trovati; else check "Configurazione pubblica senza segreti" ok ok; fi
+          LIST=$(code -X POST -H "apikey: $ANON" -H "Authorization: Bearer $ANON" -H 'Content-Type: application/json' -d '{"prefix":""}' "https://$PROJECT_REF.supabase.co/storage/v1/object/list/lumen")
+          echo "INFO elenco file del bucket con chiave pubblica: HTTP $LIST"
+
+          echo "RISULTATO: $PASS superate, $FAILN fallite"
+          echo "### Controllo sicurezza: $PASS superate, $FAILN fallite" >> "$GITHUB_STEP_SUMMARY"
+          [ "$FAILN" -eq 0 ]
