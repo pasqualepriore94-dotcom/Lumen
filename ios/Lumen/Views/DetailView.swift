@@ -23,6 +23,8 @@ struct DetailView: View {
     @State private var previewPlaying = false
     @State private var previewMuted = true
     @State private var previewPaused = false
+    /// Trailer fermato dall'utente (tocco sul video o pulsante pausa).
+    @State private var previewStopped = false
 
     private var current: MediaItem { detail?.item ?? item }
     private var canStream: Bool { app.provider.capabilities.streams }
@@ -90,6 +92,8 @@ struct DetailView: View {
                     }
                 }
                 .padding(.horizontal, 18)
+                // Con il trailer a tutta pagina titolo e dati stanno sopra la parte bassa del video
+                .padding(.top, previewId != nil ? -112 : 0)
             }
             .padding(.bottom, 40)
         }
@@ -144,25 +148,36 @@ struct DetailView: View {
     private var previewId: String? { detail?.trailer.flatMap { TrailerPlayerView.videoId(from: $0) } }
 
     private var backdrop: some View {
-        Color.clear
-            .aspectRatio(16.0 / 9.0, contentMode: .fit)
-            .overlay(RemoteImage(url: current.bestWideImage))
-            .overlay(LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .center, endPoint: .bottom)
-                .allowsHitTesting(false))
+        let hasTrailer = previewId != nil
+        return Color.clear
+            // Con il trailer: anteprima alta a tutta pagina (come le app di streaming), senza controlli di YouTube.
+            .aspectRatio(hasTrailer ? 0.82 : 16.0 / 9.0, contentMode: .fit)
+            .overlay(RemoteImage(url: hasTrailer ? (current.bestPosterImage ?? current.bestWideImage) : current.bestWideImage))
             .overlay {
-                // Il trailer parte da solo in anteprima, con i controlli di YouTube.
                 if let id = previewId {
-                    // Non parte da solo: si vede la copertina del trailer e lo avvii tu con play.
-                    TrailerPreview(videoId: id, muted: false, paused: previewPaused || trailer != nil,
-                                   controls: true, autoplay: false, playing: $previewPlaying)
+                    TrailerPreview(videoId: id, muted: previewMuted, paused: previewPaused || trailer != nil || previewStopped,
+                                   controls: false, autoplay: true, cover: true, playing: $previewPlaying)
                         .opacity(previewPlaying ? 1 : 0)
-                        .animation(.easeInOut(duration: 0.5), value: previewPlaying)
-                        .allowsHitTesting(previewPlaying)
+                        .animation(.easeInOut(duration: 0.6), value: previewPlaying)
+                        .allowsHitTesting(false)
                 }
             }
+            .overlay(LinearGradient(stops: [.init(color: .black.opacity(0.45), location: 0), .init(color: .clear, location: 0.22),
+                                            .init(color: .clear, location: 0.5), .init(color: .black.opacity(hasTrailer ? 1 : 0.7), location: 1)],
+                                    startPoint: .top, endPoint: .bottom)
+                .allowsHitTesting(false))
+            .contentShape(Rectangle())
+            .onTapGesture { if hasTrailer && previewPlaying { withAnimation { previewStopped.toggle() } } }
             .overlay {
-                // Con l'anteprima del trailer restano solo i controlli di YouTube.
-                if previewId == nil && (canStream || movieLink != nil || firstLinkedEpisode != nil || detail?.trailer != nil) {
+                if hasTrailer && previewStopped {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(.white)
+                        .frame(width: 70, height: 70)
+                        .liquidGlass(in: Circle())
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                } else if !hasTrailer && (canStream || movieLink != nil || firstLinkedEpisode != nil) {
                     Button { primaryAction() } label: {
                         Image(systemName: "play.fill")
                             .font(.system(size: 24))
@@ -171,7 +186,27 @@ struct DetailView: View {
                     .buttonStyle(GlassButtonStyle(shape: AnyShape(Circle())))
                 }
             }
-            .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 28, bottomTrailingRadius: 28, style: .continuous))
+            .overlay(alignment: .bottomTrailing) {
+                // Pausa/riprendi e audio del trailer
+                if hasTrailer && previewPlaying {
+                    VStack(spacing: 10) {
+                        Button { withAnimation { previewStopped.toggle() } } label: {
+                            Image(systemName: previewStopped ? "play.fill" : "pause.fill")
+                                .font(.system(size: 14, weight: .bold)).frame(width: 40, height: 40)
+                        }
+                        .buttonStyle(GlassButtonStyle(shape: AnyShape(Circle())))
+                        Button { previewMuted.toggle() } label: {
+                            Image(systemName: previewMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                                .font(.system(size: 14, weight: .bold)).frame(width: 40, height: 40)
+                        }
+                        .buttonStyle(GlassButtonStyle(shape: AnyShape(Circle())))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 128)
+                    .transition(.opacity)
+                }
+            }
     }
 
     private var metaRow: some View {

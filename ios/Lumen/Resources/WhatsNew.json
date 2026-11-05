@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.28.0",
+    "title": "Trailer a tutta pagina",
+    "items": [
+      {
+        "icon": "play.rectangle.fill",
+        "text": "Nella scheda il trailer occupa tutta la parte alta e parte da solo senza audio, con titolo e dati sopra il video."
+      },
+      {
+        "icon": "pause.fill",
+        "text": "Puoi fermarlo e farlo ripartire toccando il video o con il pulsante pausa, e attivare l'audio con il pulsante accanto."
+      }
+    ]
+  },
+  {
     "version": "0.27.1",
     "title": "Correzioni",
     "items": [

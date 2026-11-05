@@ -124,6 +124,8 @@ struct TrailerPreview: UIViewRepresentable {
     var controls: Bool = false
     /// false: il trailer resta fermo sulla copertina finché l'utente non preme play.
     var autoplay: Bool = true
+    /// true: il video riempie tutto il riquadro (ritagliato ai lati), come un'anteprima a tutta pagina.
+    var cover: Bool = false
     @Binding var playing: Bool
 
     func makeCoordinator() -> Coordinator { Coordinator(playing: $playing, controls: controls) }
@@ -149,7 +151,7 @@ struct TrailerPreview: UIViewRepresentable {
         <meta name="referrer" content="strict-origin-when-cross-origin">
         <style>
         html,body{margin:0;height:100%;background:transparent;overflow:hidden}
-        #p{position:fixed;left:50%;top:50%;width:100%;height:100%;transform:translate(-50%,-50%);pointer-events:\(controls ? "auto" : "none")}
+        #p{position:fixed;left:50%;top:50%;\(cover ? "width:max(100vw,177.78vh);height:max(100vh,56.25vw);transform:translate(-50%,-50%) scale(1.12);" : "width:100%;height:100%;transform:translate(-50%,-50%);")pointer-events:\(controls ? "auto" : "none")}
         </style></head><body><div id="p"></div>
         <script>
         var player, wantMuted = \(muted), wantPaused = \(autoplay ? "false" : "true");
