@@ -33,28 +33,43 @@ enum Theme {
 
 struct RemoteImage: View {
     let url: URL?
+    /// Lato massimo in pixel dell'immagine decodificata (locandine piccole, sfondi grandi).
+    var maxPixel: Int = ImagePipeline.widePixels
+    /// true: immagine intera (loghi); false: riempie il riquadro ritagliando.
+    var fit = false
+
+    @State private var loaded: UIImage?
+    @State private var loadedURL: URL?
 
     var body: some View {
         if let url, url.scheme == "bundle", let image = UIImage(named: url.host ?? url.lastPathComponent) {
-            Image(uiImage: image).resizable().scaledToFill()
-        } else if let url, let offline = ImageStore.cachedImage(for: url) {
-            // Immagine salvata per l'uso offline
-            Image(uiImage: offline).resizable().scaledToFill()
+            sized(Image(uiImage: image))
+        } else if let url, let image = current(url) {
+            sized(Image(uiImage: image))
         } else if let url {
-            AsyncImage(url: url, transaction: Transaction(animation: .easeOut(duration: 0.25))) { phase in
-                switch phase {
-                case .success(let image): image.resizable().scaledToFill()
-                case .failure: placeholder
-                default: placeholder.overlay(ProgressView().tint(.white.opacity(0.3)))
+            placeholder
+                .task(id: url) {
+                    guard let img = await ImagePipeline.shared.image(url, maxPixel: maxPixel), !Task.isCancelled else { return }
+                    withAnimation(.easeOut(duration: 0.2)) { loaded = img; loadedURL = url }
                 }
-            }
         } else {
             placeholder
         }
     }
 
+    private func current(_ url: URL) -> UIImage? {
+        if loadedURL == url, let loaded { return loaded }
+        return ImagePipeline.shared.cached(url, maxPixel: maxPixel)
+    }
+
+    @ViewBuilder
+    private func sized(_ image: Image) -> some View {
+        if fit { image.resizable().scaledToFit() } else { image.resizable().scaledToFill() }
+    }
+
     private var placeholder: some View {
         LinearGradient(colors: [Theme.surfaceHigh, Theme.surface], startPoint: .top, endPoint: .bottom)
+            .opacity(fit ? 0 : 1)
     }
 }
 
@@ -68,7 +83,7 @@ struct ImageTile: View {
     var body: some View {
         Color.clear
             .frame(width: width, height: height)
-            .overlay(RemoteImage(url: url))
+            .overlay(RemoteImage(url: url, maxPixel: max(width, height) > 260 ? ImagePipeline.widePixels : ImagePipeline.posterPixels))
             .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
     }
 }

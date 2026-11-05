@@ -67,7 +67,7 @@ struct SectionGridView: View {
         let match = library.taste.compatibility(item)
         return Color.clear
             .aspectRatio(2.0 / 3.0, contentMode: .fit)
-            .overlay(RemoteImage(url: item.bestPosterImage))
+            .overlay(RemoteImage(url: item.bestPosterImage, maxPixel: ImagePipeline.posterPixels))
             .overlay(alignment: .bottomLeading) {
                 if item.bestPosterImage == nil {
                     Text(item.title).font(.caption.bold()).padding(6)

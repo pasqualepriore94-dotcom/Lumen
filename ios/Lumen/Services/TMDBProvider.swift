@@ -177,6 +177,14 @@ struct TMDBProvider: ContentProvider {
 
     func detail(id: String) async throws -> MediaDetail {
         guard !key.isEmpty else { throw TMDBError.missingKey }
+        let cacheKey = "\(language)|\(id)"
+        if let cached = await TMDBCache.shared.detail(cacheKey) { return cached }
+        let fresh = try await loadDetail(id: id)
+        await TMDBCache.shared.store(fresh, key: cacheKey)
+        return fresh
+    }
+
+    private func loadDetail(id: String) async throws -> MediaDetail {
         let (kind, tmdbId) = try Self.split(id)
         let isMovie = kind == .movie
         let append = isMovie
@@ -513,5 +521,16 @@ actor TMDBCache {
     static let shared = TMDBCache()
     private var genres: [String: [Int: String]] = [:]
     func genres(for language: String) -> [Int: String]? { genres[language] }
+
+    /// Schede aperte di recente: riaprirle è immediato (prima ogni apertura rifaceva fino a 30 richieste).
+    private var details: [String: (date: Date, detail: MediaDetail)] = [:]
+    func detail(_ key: String) -> MediaDetail? {
+        guard let d = details[key], Date().timeIntervalSince(d.date) < 30 * 60 else { return nil }
+        return d.detail
+    }
+    func store(_ detail: MediaDetail, key: String) {
+        if details.count > 80, let oldest = details.min(by: { $0.value.date < $1.value.date })?.key { details[oldest] = nil }
+        details[key] = (Date(), detail)
+    }
     func store(_ map: [Int: String], for language: String) { genres[language] = map }
 }

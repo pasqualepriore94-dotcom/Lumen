@@ -100,6 +100,12 @@ final class AuthStore {
             return
         }
         guard Keychain.read(Keys.token) != nil else { signOut(); return }
+        // Con una sessione salvata l'app si apre al massimo dopo 1,2 secondi anche se il server è lento:
+        // la verifica continua e, se l'accesso non è più valido, si torna alla schermata di accesso.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(1200))
+            self?.isRestoring = false
+        }
         do {
             let response: UserEnvelope = try await request("/me", method: "GET", auth: true)
             setUser(response.user)

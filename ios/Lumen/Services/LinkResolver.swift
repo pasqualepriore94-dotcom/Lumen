@@ -443,13 +443,21 @@ final class LinkLibrary {
 
     func episodeCount(seriesId: String) -> Int { episodeLinks[seriesId]?.count ?? 0 }
 
-    var matchedMovies: [MediaItem] {
-        matchedItems.values.filter { !$0.isSeries && movieLinks[$0.id] != nil }.sorted { $0.title < $1.title }
+    @ObservationIgnored private var matchedCache: (version: Int, movies: [MediaItem], series: [MediaItem]) = (-1, [], [])
+
+    private var matchedLists: (movies: [MediaItem], series: [MediaItem]) {
+        _ = matchedItems.count
+        if matchedCache.version != matchesVersion {
+            let values = Array(matchedItems.values)
+            matchedCache = (matchesVersion,
+                            Self.sortedByTitle(values.filter { !$0.isSeries && movieLinks[$0.id] != nil }),
+                            Self.sortedByTitle(values.filter { $0.isSeries && episodeLinks[$0.id] != nil }))
+        }
+        return (matchedCache.movies, matchedCache.series)
     }
 
-    var matchedSeries: [MediaItem] {
-        matchedItems.values.filter { $0.isSeries && episodeLinks[$0.id] != nil }.sorted { $0.title < $1.title }
-    }
+    var matchedMovies: [MediaItem] { matchedLists.movies }
+    var matchedSeries: [MediaItem] { matchedLists.series }
 
     /// Importazione in blocco: aggiorna tutto e salva una volta sola (adatto a decine di migliaia di voci).
     func applyBatch(movies: [(LinkMedia, MediaItem)], series: [([String: LinkMedia], MediaItem)], unmatched: [LinkMedia]) {

@@ -1,5 +1,23 @@
 [
   {
+    "version": "0.33.0",
+    "title": "Ottimizzazione",
+    "items": [
+      {
+        "icon": "photo.stack",
+        "text": "Locandine più veloci: vengono preparate in background e tenute in memoria, così scorrendo non lampeggiano e non rallentano."
+      },
+      {
+        "icon": "house.fill",
+        "text": "La Home compare subito con i contenuti dell'ultima apertura e si aggiorna da sola in background."
+      },
+      {
+        "icon": "bolt.fill",
+        "text": "Le schede aperte di recente si riaprono all'istante e l'app non aspetta più il server degli account per partire."
+      }
+    ]
+  },
+  {
     "version": "0.32.3",
     "title": "Più fluida",
     "items": [

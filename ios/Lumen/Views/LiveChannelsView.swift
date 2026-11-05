@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 extension LinkLibrary {
     /// Dirette importate dalle playlist (categoria "Dirette").
@@ -42,11 +43,8 @@ struct LiveTile: View {
                                startPoint: .topLeading, endPoint: .bottomTrailing)
                 if let logo = channel.poster {
                     // Loghi dei canali: interi, senza ritaglio
-                    AsyncImage(url: logo) { phase in
-                        if case .success(let image) = phase { image.resizable().scaledToFit() }
-                        else { initials }
-                    }
-                    .padding(14)
+                    ChannelLogo(url: logo) { initials }
+                        .padding(14)
                 } else {
                     initials
                 }
@@ -285,5 +283,21 @@ struct EPGSettingsView: View {
             .onAppear { draft = epg.url }
         }
         .preferredColorScheme(.dark)
+    }
+}
+
+/// Logo del canale (dalla memoria se già scaricato), con le iniziali finché non c'è.
+struct ChannelLogo<Fallback: View>: View {
+    let url: URL
+    @ViewBuilder var fallback: () -> Fallback
+    @State private var image: UIImage?
+
+    var body: some View {
+        if let img = image ?? ImagePipeline.shared.cached(url, maxPixel: 300) {
+            Image(uiImage: img).resizable().scaledToFit()
+        } else {
+            fallback()
+                .task(id: url) { image = await ImagePipeline.shared.image(url, maxPixel: 300) }
+        }
     }
 }

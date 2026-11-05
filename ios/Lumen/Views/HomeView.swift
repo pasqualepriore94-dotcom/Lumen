@@ -234,14 +234,32 @@ struct HomeView: View {
     }
 
     private func load() async {
+        let providerKey = app.activeProviderConfig?.id ?? "none"
+        // Ultima Home salvata: compare subito, poi si aggiorna da internet.
+        if feed == nil, let saved = await HomeFeedCache.load(provider: providerKey) {
+            feed = saved
+            prefetch(saved)
+        }
         do {
             let result = try await app.provider.home()
             feed = result
             errorMessage = nil
+            HomeFeedCache.save(result, provider: providerKey)
+            prefetch(result)
         } catch is CancellationError {
         } catch {
             if feed == nil { errorMessage = error.localizedDescription }
         }
+    }
+}
+
+extension HomeView {
+    /// Prime locandine di ogni riga e immagini in evidenza pronte prima di scorrere.
+    func prefetch(_ feed: HomeFeed) {
+        let posters = feed.sections.flatMap { $0.items.prefix(6) }.compactMap(\.bestPosterImage)
+        ImagePipeline.shared.prefetch(Array(posters.prefix(24)))
+        ImagePipeline.shared.prefetch(feed.sections.prefix(3).flatMap { $0.items.prefix(2) }.compactMap(\.bestWideImage),
+                                      maxPixel: ImagePipeline.widePixels)
     }
 }
 
