@@ -46,6 +46,11 @@ struct AdminView: View {
                         }
                     }
                     NavigationLink {
+                        UnmatchedContentView()
+                    } label: {
+                        Label("Contenuti non abbinati", systemImage: "questionmark.folder")
+                    }
+                    NavigationLink {
                         LinkedContentView()
                     } label: {
                         HStack {

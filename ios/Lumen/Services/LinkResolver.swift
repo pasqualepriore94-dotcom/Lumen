@@ -499,6 +499,92 @@ final class LinkLibrary {
         return (used, bySeries.mapValues { Array($0.keys) })
     }
 
+    // MARK: Contenuti senza scheda nel catalogo
+
+    /// id stabile per un contenuto aggiunto senza scheda TMDB ("link-…").
+    static func customId(_ name: String, series: Bool) -> String {
+        let key = (series ? "s|" : "m|") + name.lowercased()
+        return "link-" + SHA256.hash(data: Data(key.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Aggiunge al catalogo un film senza scheda (titolo e locandina dalla playlist).
+    @discardableResult
+    func addCustomMovie(_ media: LinkMedia) -> MediaItem {
+        let p = ParsedTitle.parse(media.title)
+        let item = MediaItem(id: Self.customId(p.title, series: false), title: p.title, kind: .movie,
+                             poster: media.poster, backdrop: media.poster,
+                             overview: "Aggiunto dalla playlist" + (media.group.map { " · \($0)" } ?? ""), year: p.year)
+        removeLinks([media.id])
+        setMovieLink(media, for: item)
+        return item
+    }
+
+    /// Aggiunge al catalogo una serie senza scheda, con i suoi episodi ("s1e2" → video).
+    @discardableResult
+    func addCustomSeries(name: String, year: Int?, poster: URL?, episodes: [String: LinkMedia]) -> MediaItem {
+        let item = MediaItem(id: Self.customId(name, series: true), title: name, kind: .series,
+                             poster: poster, backdrop: poster, overview: "Aggiunta dalla playlist", year: year)
+        removeLinks(Set(episodes.values.map(\.id)))
+        setEpisodeLinks(episodes, for: item)
+        return item
+    }
+
+    /// In blocco: film senza scheda (un solo passaggio sull'elenco).
+    func addCustomMovies(_ list: [LinkMedia]) {
+        removeLinks(Set(list.map(\.id)))
+        for media in list {
+            let p = ParsedTitle.parse(media.title)
+            let item = MediaItem(id: Self.customId(p.title, series: false), title: p.title, kind: .movie,
+                                 poster: media.poster, backdrop: media.poster,
+                                 overview: "Aggiunto dalla playlist" + (media.group.map { " · \($0)" } ?? ""), year: p.year)
+            setMovieLink(media, for: item)
+        }
+    }
+
+    func addCustomSeries(_ list: [(name: String, year: Int?, poster: URL?, episodes: [String: LinkMedia])]) {
+        removeLinks(Set(list.flatMap { $0.episodes.values.map(\.id) }))
+        for s in list {
+            let item = MediaItem(id: Self.customId(s.name, series: true), title: s.name, kind: .series,
+                                 poster: s.poster, backdrop: s.poster, overview: "Aggiunta dalla playlist", year: s.year)
+            setEpisodeLinks(s.episodes, for: item)
+        }
+    }
+
+    /// Abbinamento manuale a una scheda del catalogo scelta dall'amministratore.
+    func matchManually(movie media: LinkMedia, to item: MediaItem) {
+        removeLinks([media.id])
+        setMovieLink(media, for: item)
+    }
+
+    func matchManually(series episodes: [String: LinkMedia], to item: MediaItem) {
+        removeLinks(Set(episodes.values.map(\.id)))
+        setEpisodeLinks(episodes, for: item)
+    }
+
+    /// Contenuti aggiunti senza scheda (categoria "Altri contenuti").
+    var customItems: [MediaItem] {
+        matchedItems.values.filter { $0.id.hasPrefix("link-") }.sorted { $0.title.localizedCompare($1.title) == .orderedAscending }
+    }
+
+    /// Scheda costruita in locale per un contenuto senza scheda TMDB (stagioni dagli episodi collegati).
+    func localDetail(for item: MediaItem) -> MediaDetail? {
+        guard item.id.hasPrefix("link-") else { return nil }
+        let base = matchedItems[item.id] ?? item
+        guard base.isSeries, let eps = episodeLinks[item.id] else { return MediaDetail(item: base) }
+        var bySeason: [Int: [Episode]] = [:]
+        for (key, media) in eps {
+            let nums = key.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+            guard nums.count == 2 else { continue }
+            bySeason[nums[0], default: []].append(Episode(id: "\(item.id)-s\(nums[0])e\(nums[1])", number: nums[1],
+                                                          title: "Episodio \(nums[1])", overview: media.title))
+        }
+        let seasons = bySeason.keys.sorted().map { n in
+            Season(id: "\(item.id)-s\(n)", number: n, title: "Stagione \(n)",
+                   episodes: bySeason[n]!.sorted { $0.number < $1.number })
+        }
+        return MediaDetail(item: base, seasons: seasons)
+    }
+
     func setMovieLink(_ media: LinkMedia, for item: MediaItem) {
         if movieLinks[item.id] == nil { FreshnessStore.shared.mark(item.id, .added); FreshnessStore.shared.save() }
         movieLinks[item.id] = media

@@ -220,6 +220,15 @@ final class PlaylistStore {
         return nil
     }
 
+    /// Come `media(of:)` ma fuori dal thread principale (playlist anche da centinaia di migliaia di voci).
+    func mediaAsync(of p: SavedPlaylist) async -> [LinkMedia] {
+        let file = Self.textFile(p.id), origin = p.origin
+        return await Task.detached(priority: .userInitiated) {
+            guard let data = try? Data(contentsOf: file), let text = PlaylistStore.decode(data) else { return [] }
+            return PlaylistStore.parse(text, origin: origin)
+        }.value
+    }
+
     func media(of p: SavedPlaylist) -> [LinkMedia] {
         guard let data = try? Data(contentsOf: Self.textFile(p.id)), let text = Self.decode(data) else { return [] }
         return Self.parse(text, origin: p.origin)

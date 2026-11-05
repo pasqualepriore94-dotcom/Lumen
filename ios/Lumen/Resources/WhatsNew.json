@@ -1,5 +1,23 @@
 [
   {
+    "version": "0.26.0",
+    "title": "Contenuti non abbinati",
+    "items": [
+      {
+        "icon": "questionmark.folder",
+        "text": "In Amministrazione → Contenuti non abbinati trovi film, serie e dirette senza scheda, divisi per tipo."
+      },
+      {
+        "icon": "link",
+        "text": "\"Abbina\" ti fa scegliere a mano la scheda giusta del catalogo."
+      },
+      {
+        "icon": "plus.rectangle.on.rectangle",
+        "text": "\"Aggiungi al catalogo\" inserisce i contenuti così come sono, in Home → Categorie → Altri contenuti; le dirette finiscono in Categorie → Dirette."
+      }
+    ]
+  },
+  {
     "version": "0.25.1",
     "title": "Correzioni",
     "items": [

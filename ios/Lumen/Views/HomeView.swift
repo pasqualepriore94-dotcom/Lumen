@@ -16,6 +16,7 @@ struct HomeView: View {
     @State private var activeFilter: HomeFilter?
     @State private var showLive = false
     @State private var showAssistant = false
+    @State private var showCustom = false
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -73,6 +74,10 @@ struct HomeView: View {
         .task(id: app.contentKey) { await load() }
         .sheet(isPresented: $showLive) { LiveChannelsView() }
         .sheet(isPresented: $showAssistant) { AssistantView() }
+        .sheet(isPresented: $showCustom) {
+            SectionGridView(section: CatalogSection(id: "custom", title: "Altri contenuti", style: nil,
+                                                    items: LinkLibrary.shared.customItems))
+        }
     }
 
     // MARK: Filtri
@@ -108,6 +113,9 @@ struct HomeView: View {
                 Menu {
                     if app.provider.capabilities.browse {
                         Button("Esplora tutto il catalogo", systemImage: "square.grid.3x3") { app.showCatalog = true }
+                    }
+                    if LinkLibrary.shared.matchedItems.keys.contains(where: { $0.hasPrefix("link-") }) {
+                        Button("Altri contenuti", systemImage: "square.stack") { showCustom = true }
                     }
                     if LinkLibrary.shared.liveCount > 0 {
                         Button("Dirette (\(LinkLibrary.shared.liveCount))", systemImage: "dot.radiowaves.left.and.right") { showLive = true }

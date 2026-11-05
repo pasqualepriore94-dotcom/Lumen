@@ -420,3 +420,16 @@ extension KeyedDecodingContainer {
         ((try? decode([Failable<T>].self, forKey: key)) ?? []).compactMap(\.value)
     }
 }
+
+
+extension Episode {
+    init(id: String, number: Int, title: String, overview: String? = nil, still: URL? = nil, duration: Int? = nil) {
+        self.id = id; self.number = number; self.title = title; self.overview = overview; self.still = still; self.duration = duration
+    }
+}
+
+extension Season {
+    init(id: String, number: Int, title: String? = nil, episodes: [Episode]) {
+        self.id = id; self.number = number; self.title = title; self.episodes = episodes
+    }
+}

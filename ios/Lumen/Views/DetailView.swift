@@ -698,6 +698,8 @@ struct DetailView: View {
     }
 
     private func load() async {
+        // Contenuti aggiunti senza scheda: scheda costruita in locale.
+        if let local = links.localDetail(for: item) { detail = local; errorMessage = nil; return }
         do {
             detail = try await app.provider.detail(id: item.id)
             errorMessage = nil
