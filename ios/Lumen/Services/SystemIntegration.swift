@@ -97,7 +97,7 @@ enum IntentInbox {
 // MARK: - Comandi di Siri
 
 struct WhatToWatchIntent: AppIntent {
-    static var title: LocalizedStringResource = "Cosa guardo stasera"
+    static var title: LocalizedStringResource = "Consigli per stasera"
     static var description = IntentDescription("Ti dice cosa guardare stasera in base ai tuoi gusti e apre i consigli in Lumen.")
     static var openAppWhenRun = true
 
@@ -128,7 +128,7 @@ struct SearchLumenIntent: AppIntent {
 }
 
 struct ResumeWatchingIntent: AppIntent {
-    static var title: LocalizedStringResource = "Riprendi la visione"
+    static var title: LocalizedStringResource = "Dove ero rimasto"
     static var description = IntentDescription("Apre l'ultimo film o l'ultima serie che stavi guardando.")
     static var openAppWhenRun = true
 
@@ -146,20 +146,22 @@ struct ResumeWatchingIntent: AppIntent {
 struct LumenShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(intent: WhatToWatchIntent(), phrases: [
-            "Cosa guardo stasera su \(.applicationName)",
-            "Cosa guardo stasera con \(.applicationName)",
+            // Niente "guarda", "vedi", "riprendi": Siri le prende per i suoi comandi di riproduzione.
             "Consigliami qualcosa su \(.applicationName)",
-            "Cosa vedo su \(.applicationName)"
-        ], shortTitle: "Cosa guardo stasera", systemImageName: "sparkles.tv")
+            "Cosa mi consiglia \(.applicationName)",
+            "Consigli di \(.applicationName) per stasera",
+            "Dammi un consiglio su \(.applicationName)"
+        ], shortTitle: "Consigli per stasera", systemImageName: "sparkles.tv")
         AppShortcut(intent: SearchLumenIntent(), phrases: [
             "Cerca su \(.applicationName)",
             "Cerca un film su \(.applicationName)",
             "Cerca una serie su \(.applicationName)"
         ], shortTitle: "Cerca su Lumen", systemImageName: "magnifyingglass")
         AppShortcut(intent: ResumeWatchingIntent(), phrases: [
-            "Riprendi la visione su \(.applicationName)",
-            "Continua a guardare su \(.applicationName)"
-        ], shortTitle: "Riprendi la visione", systemImageName: "play.circle")
+            "Dove ero rimasto su \(.applicationName)",
+            "Dove eravamo rimasti su \(.applicationName)",
+            "Apri l'ultimo titolo su \(.applicationName)"
+        ], shortTitle: "Dove ero rimasto", systemImageName: "play.circle")
     }
 }
 

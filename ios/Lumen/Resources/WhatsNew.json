@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.32.1",
+    "title": "Siri",
+    "items": [
+      {
+        "icon": "mic.fill",
+        "text": "Nuove frasi per Siri: «Consigliami qualcosa su Lumen» o «Cosa mi consiglia Lumen» per i consigli, «Dove ero rimasto su Lumen» per riprendere l'ultimo titolo. «Cerca su Lumen» resta uguale."
+      }
+    ]
+  },
+  {
     "version": "0.32.0",
     "title": "Consigli più ricchi",
     "items": [
