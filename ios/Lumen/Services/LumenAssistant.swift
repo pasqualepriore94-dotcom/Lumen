@@ -59,6 +59,25 @@ final class LumenAssistant {
         return "Serve iOS 26 con Apple Intelligence."
     }
 
+    /// true mentre Apple Intelligence sta ancora preparando i suggerimenti (gli altri risultati sono già visibili).
+    private(set) var aiThinking = false
+    @ObservationIgnored private var preparedInstructions: String?
+    @ObservationIgnored private var preparedSession: AnyObject?
+
+    /// Prepara in anticipo modello e contesto (all'apertura della schermata): la prima risposta arriva prima.
+    func prewarm(library: Library) {
+        guard Self.unavailableReason == nil, preparedSession == nil else { return }
+        let instructions = preparedInstructions ?? Self.instructions(library: library)
+        preparedInstructions = instructions
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            let session = LanguageModelSession(instructions: instructions)
+            session.prewarm()
+            preparedSession = session
+        }
+        #endif
+    }
+
     func ask(_ question: String, app: AppState, library: Library) async {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
@@ -70,7 +89,12 @@ final class LumenAssistant {
         state = .thinking
         let tmdb = app.config.providers.first { $0.type == .tmdb && $0.isUsable }.map { TMDBProvider(config: $0) }
 
-        // 1) Se hai scritto un titolo: ricerca classica, subito.
+        // Apple Intelligence parte subito, in parallelo alle ricerche classiche.
+        let aiAvailable = Self.unavailableReason == nil
+        aiThinking = aiAvailable
+        let aiTask: Task<(String, [Pick])?, Error>? = aiAvailable ? Task { @MainActor in try await self.generate(q, app: app, library: library) } : nil
+
+        // 1) Titolo scritto direttamente: ricerca classica.
         if let tmdb, let found = try? await tmdb.search(q) {
             titleMatches = Self.plausibleTitles(found, query: q).prefix(12).map(Self.pick)
         }
@@ -79,32 +103,43 @@ final class LumenAssistant {
         let catalog = Array(LinkLibrary.shared.matchedItems.values)
         let found = await Task.detached(priority: .userInitiated) { Self.searchPlaylist(q, items: catalog, taste: taste) }.value
         playlistMatches = found.map(Self.pick).filter { p in !titleMatches.contains { $0.id == p.id } }
+        if hasResults { state = .done }   // si vedono subito, mentre l'AI finisce
 
-        // 3) Apple Intelligence: suggerimenti a partire dalla descrizione.
-        var aiError: String?
-        if let reason = Self.unavailableReason {
-            aiError = reason
-        } else {
-            #if canImport(FoundationModels)
-            if #available(iOS 26.0, *) {
-                do {
-                    let session = LanguageModelSession(instructions: Self.instructions(library: library))
-                    let response = try await session.respond(to: q, generating: AIPicks.self,
-                                                             options: GenerationOptions(temperature: 0.3))
-                    intro = response.content.intro
+        // 3) Suggerimenti di Apple Intelligence
+        var aiError: String? = aiAvailable ? nil : Self.unavailableReason
+        if let aiTask {
+            do {
+                if let result = try await aiTask.value {
+                    intro = result.0
                     let known = Set(titleMatches.map(\.id))
-                    picks = await resolve(response.content.picks, app: app).filter { !known.contains($0.id) }
-                } catch {
-                    aiError = Self.describe(error)
+                    picks = result.1.filter { !known.contains($0.id) }
                 }
+            } catch {
+                aiError = Self.describe(error)
             }
-            #endif
         }
+        aiThinking = false
         if hasResults {
             state = .done
         } else {
             state = .failed(aiError ?? "Non ho trovato titoli adatti: prova a descrivere la richiesta in un altro modo.")
         }
+        // Sessione pronta per la prossima domanda
+        preparedSession = nil
+        prewarm(library: library)
+    }
+
+    private func generate(_ q: String, app: AppState, library: Library) async throws -> (String, [Pick])? {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            let session = (preparedSession as? LanguageModelSession)
+                ?? LanguageModelSession(instructions: preparedInstructions ?? Self.instructions(library: library))
+            preparedSession = nil
+            let response = try await session.respond(to: q, generating: AIPicks.self, options: GenerationOptions(temperature: 0.3))
+            return (response.content.intro, await resolve(response.content.picks, app: app))
+        }
+        #endif
+        return nil
     }
 
     // MARK: Ricerca per titolo e nella playlist
@@ -168,7 +203,7 @@ final class LumenAssistant {
         let links = LinkLibrary.shared
         let candidates = links.matchedItems.values
             .sorted { (taste.compatibility($0) ?? 50) > (taste.compatibility($1) ?? 50) }
-            .prefix(45)
+            .prefix(30)
             .map { "\($0.title)" + ($0.year.map { " (\($0))" } ?? "") }
             .joined(separator: "; ")
         return """
@@ -191,13 +226,22 @@ final class LumenAssistant {
         var byTitle: [String: MediaItem] = [:]
         for item in links.matchedItems.values { byTitle[Self.norm(item.title)] = item }
         let tmdb = app.config.providers.first { $0.type == .tmdb && $0.isUsable }.map { TMDBProvider(config: $0) }
+        // Ricerche delle schede in parallelo (prima erano una alla volta)
+        let list = Array(raw.prefix(12))
+        var found: [Int: MediaItem] = [:]
+        await withTaskGroup(of: (Int, MediaItem?).self) { group in
+            for (i, p) in list.enumerated() {
+                if let local = byTitle[Self.norm(p.title)] { found[i] = local; continue }
+                guard let tmdb else { continue }
+                let title = p.title, year = p.year > 1900 ? p.year : nil, series = p.isSeries
+                group.addTask { (i, try? await tmdb.match(title: title, year: year, series: series)) }
+            }
+            for await (i, item) in group { if let item { found[i] = item } }
+        }
         var out: [Pick] = []
         var seen = Set<String>()
-        for p in raw.prefix(12) {
-            var item = byTitle[Self.norm(p.title)]
-            if item == nil, let tmdb {
-                item = try? await tmdb.match(title: p.title, year: p.year > 1900 ? p.year : nil, series: p.isSeries)
-            }
+        for (i, p) in list.enumerated() {
+            let item = found[i]
             let key = item?.id ?? Self.norm(p.title)
             guard seen.insert(key).inserted else { continue }
             let available = item.map { links.link(forItem: $0.id) != nil || links.episodeCount(seriesId: $0.id) > 0 } ?? false

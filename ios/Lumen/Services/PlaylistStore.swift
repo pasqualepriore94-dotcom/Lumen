@@ -1,4 +1,6 @@
 import Foundation
+import UIKit
+import UserNotifications
 import Observation
 
 /// Playlist M3U caricata dall'amministratore (da file o da link), salvata sul dispositivo.
@@ -56,7 +58,7 @@ final class PlaylistStore {
 
     /// All'avvio: riscarica le playlist da link (al massimo ogni 6 ore), trova le voci nuove
     /// e lo segnala nella sezione Notifiche dell'app.
-    func checkForUpdates(force: Bool = false) async {
+    func checkForUpdates(app: AppState, force: Bool = false) async {
         guard !checking else { return }
         checking = true
         defer { checking = false }
@@ -107,29 +109,62 @@ final class PlaylistStore {
                                                               icon: "play.tv.fill"))
             }
             guard !added.isEmpty else { continue }
-            // Le altre novità restano in attesa di analisi (sommate a quelle precedenti).
-            let pendingURL = Self.pendingFile(id)
-            await Task.detached(priority: .utility) {
-                var pending = (try? Data(contentsOf: pendingURL)).flatMap { try? JSONDecoder().decode([LinkMedia].self, from: $0) } ?? []
-                let known = Set(pending.map(\.id))
-                pending += added.filter { !known.contains($0.id) }
-                if let out = try? JSONEncoder().encode(pending) { try? out.write(to: pendingURL, options: .atomic) }
-            }.value
             WatchlistMonitor.shared.playlistAdded(added, playlistName: playlists[i].name)
-            let vods = added.filter { !$0.isLive }
-            let episodes = vods.filter { ParsedTitle.parse($0.title).isEpisode }.count
-            let movies = vods.count - episodes
-            let lives = added.count - vods.count
-            var parts: [String] = []
-            if movies > 0 { parts.append(movies == 1 ? "1 film" : "\(movies) film") }
-            if episodes > 0 { parts.append(episodes == 1 ? "1 episodio" : "\(episodes) episodi") }
-            if lives > 0 { parts.append(lives == 1 ? "1 diretta" : "\(lives) dirette") }
-            NotificationStore.shared.post(AppNotification(
-                kind: .newContent,
-                title: "Nuovi contenuti in \(playlists[i].name)",
-                body: parts.joined(separator: ", ") + ". Da analizzare e importare: tocca per iniziare.",
-                icon: "sparkles.tv",
-                playlistId: id))
+            // Le novità vengono abbinate al catalogo e aggiunte subito, senza chiedere.
+            await autoImport(added, playlistName: playlists[i].name, app: app)
+        }
+    }
+
+    /// Abbina le nuove voci al catalogo (riusando le ricerche già fatte) e le importa direttamente,
+    /// poi mostra la finestra con i contenuti aggiunti (salvata anche tra le notifiche).
+    private func autoImport(_ added: [LinkMedia], playlistName: String, app: AppState) async {
+        let tmdb = app.config.providers.first { $0.type == .tmdb && $0.isUsable }.map { TMDBProvider(config: $0) }
+        let mapper = LinkMapper()
+        mapper.cache = ImportJob.shared.mapper.cache
+        await mapper.prepare(added, tmdb: tmdb)
+        ImportJob.shared.mapper.cache.merge(mapper.cache) { _, new in new }
+        LinkLibrary.shared.applyMapping(movies: mapper.movies, series: mapper.series, lives: mapper.lives)
+
+        let movies = mapper.movies.compactMap(\.match)
+        let series = mapper.series.compactMap { s in s.match.map { (s, $0) } }
+        var seen = Set<String>()
+        var rows: [AnnouncementItem] = []
+        for m in movies where seen.insert(m.id).inserted {
+            rows.append(AnnouncementItem(text: m.title, detail: "Film" + (m.year.map { " · \($0)" } ?? ""), media: m))
+        }
+        for (proposal, item) in series where seen.insert(item.id).inserted {
+            let n = proposal.episodes.count
+            rows.append(AnnouncementItem(text: item.title, detail: "Serie TV · " + (n == 1 ? "1 episodio" : "\(n) episodi"), media: item))
+        }
+        let lives = mapper.lives.count
+        let unmatched = mapper.movies.filter { $0.match == nil }.count + mapper.series.filter { $0.match == nil }.count
+        if lives > 0 {
+            rows.append(AnnouncementItem(icon: "dot.radiowaves.left.and.right", text: lives == 1 ? "1 nuova diretta" : "\(lives) nuove dirette",
+                                         detail: "In Categorie → Dirette"))
+        }
+        if unmatched > 0 {
+            rows.append(AnnouncementItem(icon: "questionmark.folder", text: "\(unmatched) voci senza scheda nel catalogo",
+                                         detail: "In Amministrazione → Contenuti collegati da link"))
+        }
+        guard !rows.isEmpty else { return }
+        let shown = Array(rows.prefix(40))
+        let count = seen.count
+        let n = AppNotification(
+            kind: .contentAdded,
+            title: count > 0 ? (count == 1 ? "1 nuovo titolo aggiunto" : "\(count) nuovi titoli aggiunti") : "Nuovi contenuti aggiunti",
+            body: rows.prefix(12).map { "• " + $0.text }.joined(separator: "\n"),
+            icon: "sparkles.tv",
+            items: shown,
+            subtitle: "Da \(playlistName)" + (rows.count > shown.count ? " · altri \(rows.count - shown.count) nel catalogo" : ""))
+        NotificationStore.shared.post(n)
+        if UIApplication.shared.applicationState == .active {
+            if app.announcement == nil { app.announcement = n }
+        } else {
+            let content = UNMutableNotificationContent()
+            content.title = n.title
+            content.body = rows.prefix(4).map(\.text).joined(separator: ", ") + (rows.count > 4 ? "…" : "")
+            content.sound = .default
+            try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
         }
     }
 

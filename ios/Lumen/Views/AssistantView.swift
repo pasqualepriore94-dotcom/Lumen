@@ -59,6 +59,7 @@ struct AssistantView: View {
         }
         .preferredColorScheme(.dark)
         .onAppear {
+            assistant.prewarm(library: library)
             if !initialQuestion.isEmpty, question.isEmpty {
                 question = initialQuestion
                 send()
@@ -129,6 +130,13 @@ struct AssistantView: View {
         VStack(alignment: .leading, spacing: 12) {
             if !assistant.titleMatches.isEmpty {
                 section("Titoli trovati", icon: "magnifyingglass", assistant.titleMatches)
+            }
+            if assistant.aiThinking {
+                HStack(spacing: 10) {
+                    ProgressView().tint(app.accent)
+                    Text("Apple Intelligence sta preparando altri suggerimenti…").font(.subheadline).foregroundStyle(Theme.secondaryText)
+                }
+                .padding(.top, 6)
             }
             if !assistant.picks.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {

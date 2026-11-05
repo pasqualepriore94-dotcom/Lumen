@@ -28,17 +28,20 @@ enum WhatsNew {
     }
 
     /// Note da mostrare ora (una volta per versione), già registrate tra le notifiche.
-    static func pending() -> ReleaseNote? {
+    static func pending() -> AppNotification? {
         let version = currentVersion
         guard UserDefaults.standard.string(forKey: seenKey) != version,
               let note = notes.first(where: { $0.version == version }) ?? notes.first else { return nil }
         UserDefaults.standard.set(version, forKey: seenKey)
-        NotificationStore.shared.post(AppNotification(
+        let n = AppNotification(
             kind: .update,
-            title: "Novità di Lumen \(version)",
+            title: "Cosa c'è di nuovo",
             body: note.items.map { "• " + $0.text }.joined(separator: "\n"),
-            icon: "sparkles"))
-        return note
+            icon: "sparkles",
+            items: note.items.map { AnnouncementItem(icon: $0.icon, text: $0.text) },
+            subtitle: "Lumen \(note.version)" + (note.title.map { " · \($0)" } ?? ""))
+        NotificationStore.shared.post(n)
+        return n
     }
 }
 

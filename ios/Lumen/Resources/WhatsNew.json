@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.24.0",
+    "title": "Novità aggiunte da sole",
+    "items": [
+      {
+        "icon": "sparkles.tv",
+        "text": "I nuovi contenuti trovati nelle playlist vengono aggiunti subito al catalogo, senza doverli importare a mano."
+      },
+      {
+        "icon": "rectangle.on.rectangle",
+        "text": "Una finestra come questa ti mostra i titoli aggiunti: tocca un titolo per aprirne la scheda."
+      },
+      {
+        "icon": "bell.badge",
+        "text": "Toccando una notifica nella sezione Notifiche si riapre nella stessa finestra di quando è arrivata."
+      },
+      {
+        "icon": "bolt.fill",
+        "text": "Chiedi a Lumen è più veloce: i risultati per titolo e dalla playlist compaiono subito, mentre Apple Intelligence prepara i suoi suggerimenti."
+      }
+    ]
+  },
+  {
     "version": "0.23.1",
     "title": "Chiedi a Lumen più preciso",
     "items": [

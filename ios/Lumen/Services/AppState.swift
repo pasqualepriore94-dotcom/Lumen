@@ -60,6 +60,8 @@ final class AppState {
     var scrollTopSignal = 0
     /// Link di attivazione di un account aperto dall'email (lumen://approve…).
     var approvalRequest: ApprovalRequest?
+    /// Finestra a comparsa da mostrare (novità dell'app, contenuti aggiunti, notifica riaperta).
+    var announcement: AppNotification?
     var scrollTopTab: AppTab = .home
 
     func scrollToTop(_ tab: AppTab) {

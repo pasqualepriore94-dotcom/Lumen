@@ -3,7 +3,7 @@ import Observation
 
 /// Notifica mostrata nella sezione Notifiche dell'app (campanella in alto).
 struct AppNotification: Codable, Identifiable, Hashable {
-    enum Kind: String, Codable { case newContent, analysisDone, trophy, update, info }
+    enum Kind: String, Codable { case newContent, analysisDone, trophy, update, info, contentAdded }
 
     var id = UUID()
     var kind: Kind
@@ -14,6 +14,17 @@ struct AppNotification: Codable, Identifiable, Hashable {
     var read = false
     /// Playlist con contenuti nuovi da analizzare (per `newContent`).
     var playlistId: UUID?
+    /// Righe della finestra a comparsa (novità, contenuti aggiunti…), per riaprirla uguale.
+    var items: [AnnouncementItem]?
+    var subtitle: String?
+}
+
+/// Una riga della finestra a comparsa: icona e testo, oppure un titolo del catalogo con locandina.
+struct AnnouncementItem: Codable, Hashable {
+    var icon: String?
+    var text: String
+    var detail: String?
+    var media: MediaItem?
 }
 
 @MainActor
@@ -164,36 +175,10 @@ struct NotificationsView: View {
         }
     }
 
+    /// Riapre la notifica nella stessa finestra a comparsa di quando è arrivata.
     private func tap(_ n: AppNotification) {
         store.markRead(n.id)
-        switch n.kind {
-        case .newContent:
-            guard auth.isAdmin, let pid = n.playlistId else { return }
-            let pending = PlaylistStore.shared.pendingNew(pid)
-            let name = PlaylistStore.shared.playlists.first { $0.id == pid }?.name ?? "Playlist"
-            open {
-                if !pending.isEmpty {
-                    ImportJob.shared.startMedia(pending, name: "\(name) · novità", app: app)
-                    PlaylistStore.shared.clearPending(pid)
-                }
-                app.showAdmin = true
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(450))
-                    ImportJob.shared.openRequested = true
-                }
-            }
-        case .analysisDone:
-            guard auth.isAdmin else { return }
-            open {
-                app.showAdmin = true
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(450))
-                    ImportJob.shared.openRequested = true
-                }
-            }
-        case .trophy, .update, .info:
-            break
-        }
+        open { app.announcement = n }
     }
 
     private func open(_ action: @escaping () -> Void) {
@@ -201,6 +186,154 @@ struct NotificationsView: View {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(450))
             action()
+        }
+    }
+}
+
+
+/// Azioni disponibili dalla finestra a comparsa di una notifica.
+@MainActor
+enum NotificationActions {
+    static func actionTitle(_ n: AppNotification, isAdmin: Bool) -> String? {
+        guard isAdmin else { return nil }
+        switch n.kind {
+        case .newContent where n.playlistId != nil: return "Analizza e importa le novità"
+        case .analysisDone: return "Scegli cosa importare"
+        default: return nil
+        }
+    }
+
+    static func perform(_ n: AppNotification, app: AppState) {
+        switch n.kind {
+        case .newContent:
+            guard let pid = n.playlistId else { return }
+            let pending = PlaylistStore.shared.pendingNew(pid)
+            let name = PlaylistStore.shared.playlists.first { $0.id == pid }?.name ?? "Playlist"
+            if !pending.isEmpty {
+                ImportJob.shared.startMedia(pending, name: "\(name) · novità", app: app)
+                PlaylistStore.shared.clearPending(pid)
+            }
+            openImport(app)
+        case .analysisDone:
+            openImport(app)
+        default:
+            break
+        }
+    }
+
+    private static func openImport(_ app: AppState) {
+        app.showAdmin = true
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(450))
+            ImportJob.shared.openRequested = true
+        }
+    }
+}
+
+/// Finestra a comparsa delle notifiche (stesso stile di "Cosa c'è di nuovo"): si apre quando arrivano
+/// novità dell'app o nuovi contenuti, e di nuovo toccando la notifica nella sezione Notifiche.
+struct AnnouncementSheet: View {
+    @Environment(AppState.self) private var app
+    @Environment(AuthStore.self) private var auth
+    @Environment(\.dismiss) private var dismiss
+    let notification: AppNotification
+
+    private var rows: [AnnouncementItem] {
+        if let items = notification.items, !items.isEmpty { return items }
+        // Notifiche senza righe: il testo, una riga per paragrafo/punto
+        let lines = notification.body.split(separator: "\n").map {
+            $0.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "• ", with: "")
+        }.filter { !$0.isEmpty }
+        return lines.map { AnnouncementItem(icon: notification.icon, text: $0) }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Image(systemName: notification.icon)
+                            .font(.system(size: 26, weight: .semibold))
+                            .foregroundStyle(app.accent)
+                            .frame(width: 56, height: 56)
+                            .liquidGlass(in: Circle(), tint: app.accent.opacity(0.35))
+                            .padding(.bottom, 6)
+                        Text(notification.title).font(.system(size: 28, weight: .heavy))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(notification.subtitle ?? notification.date.formatted(date: .abbreviated, time: .shortened))
+                            .font(.subheadline).foregroundStyle(Theme.secondaryText)
+                    }
+                    .padding(.top, 30)
+                    ForEach(rows, id: \.self) { row($0) }
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 12)
+            }
+            if let action = NotificationActions.actionTitle(notification, isAdmin: auth.isAdmin) {
+                Button {
+                    let n = notification
+                    dismiss()
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(400))
+                        NotificationActions.perform(n, app: app)
+                    }
+                } label: {
+                    Text(action).font(.headline).frame(maxWidth: .infinity).padding(.vertical, 15)
+                }
+                .buttonStyle(GlassButtonStyle(tint: app.accent))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 24)
+                .padding(.top, 14)
+            }
+            Button { dismiss() } label: {
+                Text("Continua").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 15)
+            }
+            .buttonStyle(GlassButtonStyle(tint: NotificationActions.actionTitle(notification, isAdmin: auth.isAdmin) == nil ? app.accent : nil))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 14)
+            Text("Lo ritrovi tra le Notifiche").font(.caption).foregroundStyle(Theme.secondaryText).padding(.bottom, 8)
+        }
+        .background(AuroraBackground(accent: app.accent).opacity(0.5).ignoresSafeArea())
+        .preferredColorScheme(.dark)
+        .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder
+    private func row(_ item: AnnouncementItem) -> some View {
+        if let media = item.media {
+            Button {
+                dismiss()
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(400))
+                    app.detailItem = media
+                }
+            } label: {
+                HStack(spacing: 14) {
+                    ImageTile(url: media.bestPosterImage, width: 54, height: 80, corner: 8)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(item.text).font(.body.weight(.semibold)).lineLimit(2)
+                        if let d = item.detail { Text(d).font(.caption).foregroundStyle(Theme.secondaryText) }
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(Theme.secondaryText)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: item.icon ?? notification.icon)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(app.accent)
+                    .frame(width: 42, height: 42)
+                    .liquidGlass(in: Circle(), tint: app.accent.opacity(0.3))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.text).font(.body).fixedSize(horizontal: false, vertical: true)
+                    if let d = item.detail { Text(d).font(.caption).foregroundStyle(Theme.secondaryText) }
+                }
+                .padding(.top, 9)
+            }
         }
     }
 }

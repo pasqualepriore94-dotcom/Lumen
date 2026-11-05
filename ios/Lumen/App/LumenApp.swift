@@ -8,7 +8,6 @@ struct LumenApp: App {
     @State private var auth = AuthStore()
     @State private var updates = UpdateChecker()
     @State private var showSplash = true
-    @State private var whatsNew: ReleaseNote?
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -40,14 +39,13 @@ struct LumenApp: App {
                         // Dopo un aggiornamento: "Cosa c'è di nuovo" (una volta per versione).
                         Task { @MainActor in
                             try? await Task.sleep(for: .milliseconds(600))
-                            whatsNew = WhatsNew.pending()
+                            if let n = WhatsNew.pending() { app.announcement = n }
                         }
                     }
                         .transition(.opacity)
                         .zIndex(10)
                 }
             }
-            .sheet(item: $whatsNew) { WhatsNewSheet(note: $0) }
             .environment(app)
             .environment(library)
             .environment(auth)
@@ -66,7 +64,7 @@ struct LumenApp: App {
                     if auth.isAdmin {
                         Task {
                             try? await Task.sleep(for: .seconds(6))
-                            await PlaylistStore.shared.checkForUpdates()
+                            await PlaylistStore.shared.checkForUpdates(app: app)
                         }
                     }
                 }
@@ -159,6 +157,7 @@ struct RootView: View {
             if let request = ApprovalRequest(url: url) { app.approvalRequest = request }
         }
         .sheet(item: Binding(get: { app.approvalRequest }, set: { app.approvalRequest = $0 })) { ApprovalSheet(request: $0) }
+        .sheet(item: Binding(get: { app.announcement }, set: { app.announcement = $0 })) { AnnouncementSheet(notification: $0) }
         .onChange(of: library.activitySignature) { AchievementTracker.shared.check(library) }
         .onChange(of: library.myList.map(\.id)) { WatchlistMonitor.shared.sync(list: library.myList, app: app) }
         .playbackHUD()
