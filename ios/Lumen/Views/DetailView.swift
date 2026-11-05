@@ -16,6 +16,9 @@ struct DetailView: View {
     @State private var watchSummary: WatchedEntry?
     @State private var trailer: TrailerItem?
     @State private var sagaItem: MediaItem?
+    @State private var recapText: String?
+    @State private var recapLoading = false
+    @State private var recapError: String?
     @State private var previewPlaying = false
     @State private var previewMuted = true
     @State private var previewPaused = false
@@ -51,6 +54,7 @@ struct DetailView: View {
                     metaRow
                     ratings
                     releasesCard
+                    recapCard
                     mainActions
                     if auth.isAdmin && (movieLink != nil || seriesHasLinks) {
                         Button(role: .destructive) {
@@ -237,6 +241,50 @@ struct DetailView: View {
                 .scrollIndicators(.hidden)
                 .onAppear { proxy.scrollTo(current.id, anchor: .leading) }
             }
+        }
+    }
+
+    /// "Dove eravamo rimasti?": riassunto con Apple Intelligence fino all'ultimo episodio visto.
+    @ViewBuilder
+    private var recapCard: some View {
+        if current.isSeries, let detail, !detail.seasons.isEmpty,
+           let last = SeriesRecap.lastWatched(seriesId: current.id, library: library) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label("Dove eravamo rimasti?", systemImage: "sparkles").font(.headline)
+                    Spacer()
+                    Text("fino a S\(last.season) E\(last.episode)").font(.caption).foregroundStyle(Theme.secondaryText)
+                }
+                if let text = recapText ?? SeriesRecap.cached(seriesId: current.id, upTo: last) {
+                    Text(text).font(.subheadline).foregroundStyle(.white.opacity(0.9)).fixedSize(horizontal: false, vertical: true)
+                    Text("Riassunto generato da Apple Intelligence: può contenere imprecisioni.")
+                        .font(.caption2).foregroundStyle(Theme.secondaryText)
+                } else if recapLoading {
+                    HStack(spacing: 8) {
+                        ProgressView().tint(app.accent)
+                        Text("Sto ripercorrendo gli episodi visti…").font(.subheadline).foregroundStyle(Theme.secondaryText)
+                    }
+                } else {
+                    if let recapError { Text(recapError).font(.caption).foregroundStyle(.orange) }
+                    Button {
+                        recapLoading = true
+                        recapError = nil
+                        Task {
+                            do { recapText = try await SeriesRecap.generate(title: current.title, seriesId: current.id, detail: detail, upTo: last) }
+                            catch { recapError = error.localizedDescription }
+                            recapLoading = false
+                        }
+                    } label: {
+                        Text("Riassumi senza spoiler").font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 14).padding(.vertical, 9)
+                    }
+                    .buttonStyle(GlassButtonStyle(tint: app.accent.opacity(0.6)))
+                    .foregroundStyle(.white)
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .liquidGlassCard(radius: 20)
         }
     }
 

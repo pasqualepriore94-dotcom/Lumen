@@ -62,6 +62,7 @@ final class LumenAssistant {
     /// true mentre Apple Intelligence sta ancora preparando i suggerimenti (gli altri risultati sono già visibili).
     private(set) var aiThinking = false
     @ObservationIgnored private var preparedInstructions: String?
+    @ObservationIgnored private var requestId = 0
     @ObservationIgnored private var preparedSession: AnyObject?
 
     /// Prepara in anticipo modello e contesto (all'apertura della schermata): la prima risposta arriva prima.
@@ -81,6 +82,8 @@ final class LumenAssistant {
     func ask(_ question: String, app: AppState, library: Library) async {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
+        requestId += 1
+        let rid = requestId
         lastQuestion = q
         intro = ""
         picks = []
@@ -96,12 +99,14 @@ final class LumenAssistant {
 
         // 1) Titolo scritto direttamente: ricerca classica.
         if let tmdb, let found = try? await tmdb.search(q) {
+            guard rid == requestId else { aiTask?.cancel(); return }
             titleMatches = Self.plausibleTitles(found, query: q).prefix(12).map(Self.pick)
         }
         // 2) Parole della richiesta nella tua playlist (titoli e trame).
         let taste = library.taste
         let catalog = Array(LinkLibrary.shared.matchedItems.values)
         let found = await Task.detached(priority: .userInitiated) { Self.searchPlaylist(q, items: catalog, taste: taste) }.value
+        guard rid == requestId else { aiTask?.cancel(); return }
         playlistMatches = found.map(Self.pick).filter { p in !titleMatches.contains { $0.id == p.id } }
         if hasResults { state = .done }   // si vedono subito, mentre l'AI finisce
 
@@ -109,12 +114,15 @@ final class LumenAssistant {
         var aiError: String? = aiAvailable ? nil : Self.unavailableReason
         if let aiTask {
             do {
-                if let result = try await aiTask.value {
+                let value = try await aiTask.value
+                guard rid == requestId else { return }   // nel frattempo è arrivata un'altra ricerca
+                if let result = value {
                     intro = result.0
                     let known = Set(titleMatches.map(\.id))
                     picks = result.1.filter { !known.contains($0.id) }
                 }
             } catch {
+                guard rid == requestId else { return }
                 aiError = Self.describe(error)
             }
         }

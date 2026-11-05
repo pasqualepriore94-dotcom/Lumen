@@ -10,8 +10,9 @@ struct SearchView: View {
     @State private var searching = false
     @State private var errorMessage: String?
     @FocusState private var focused: Bool
-    @State private var showAssistant = false
-    @State private var assistantQuestion = ""
+    /// Ricerca con Apple Intelligence (al posto di quella classica, quando disponibile).
+    @State private var assistant = LumenAssistant()
+    private var aiSearch: Bool { LumenAssistant.unavailableReason == nil }
 
     private let columns = [GridItem(.adaptive(minimum: 104), spacing: 8)]
 
@@ -19,7 +20,6 @@ struct SearchView: View {
         VStack(spacing: 0) {
             TabHeader(title: "Cerca", showsLogo: false)
             searchBar
-            assistantButton
             ScrollViewReader { proxy in
             ScrollView {
                 Color.clear.frame(height: 0).id("search-top")
@@ -35,37 +35,29 @@ struct SearchView: View {
             .scrollIndicators(.hidden)
         }
         .background(Color.black.ignoresSafeArea())
-        .sheet(isPresented: $showAssistant) { AssistantView(initialQuestion: assistantQuestion) }
         .task(id: app.contentKey) {
             recommended = (try? await app.provider.home().allItems) ?? []
         }
-        .task(id: query + app.contentKey) { await runSearch() }
-    }
-
-    /// Ricerca a parole con Apple Intelligence ("il film dell'astronauta su Marte").
-    private var assistantButton: some View {
-        Button {
-            assistantQuestion = query
-            showAssistant = true
-        } label: {
-            Label(query.trimmingCharacters(in: .whitespaces).isEmpty
-                  ? "Non ricordi il titolo? Descrivilo a Lumen"
-                  : "Chiedi a Lumen: “\(query)”", systemImage: "sparkles")
-                .font(.footnote.weight(.semibold)).lineLimit(1)
-                .padding(.horizontal, 14).padding(.vertical, 9)
+        .task(id: query + app.contentKey) {
+            if aiSearch {
+                // Aspetta che tu finisca di scrivere, poi cerca con Apple Intelligence
+                let q = query.trimmingCharacters(in: .whitespaces)
+                guard !q.isEmpty else { return }
+                try? await Task.sleep(for: .milliseconds(850))
+                guard !Task.isCancelled else { return }
+                await assistant.ask(q, app: app, library: library)
+            } else {
+                await runSearch()
+            }
         }
-        .buttonStyle(GlassButtonStyle(tint: app.accent.opacity(0.5)))
-        .foregroundStyle(.white)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.bottom, 10)
+        .onAppear { if aiSearch { assistant.prewarm(library: library) } }
     }
 
     private var searchBar: some View {
         HStack(spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(Theme.secondaryText)
-                TextField("", text: $query, prompt: Text("Cerca serie, film…").foregroundColor(Theme.secondaryText))
+                TextField("", text: $query, prompt: Text(LumenAssistant.unavailableReason == nil ? "Un titolo o cosa ti va di vedere…" : "Cerca serie, film…").foregroundColor(Theme.secondaryText))
                     .focused($focused)
                     .submitLabel(.search)
                     .autocorrectionDisabled()
@@ -163,6 +155,37 @@ struct SearchView: View {
 
     @ViewBuilder
     private var resultsGrid: some View {
+        if aiSearch {
+            aiResults
+        } else {
+            classicResults
+        }
+    }
+
+    @ViewBuilder
+    private var aiResults: some View {
+        switch assistant.state {
+        case .idle, .thinking where !assistant.hasResults:
+            VStack(spacing: 10) {
+                ProgressView().tint(.white)
+                Text("Cerco con Apple Intelligence…").font(.footnote).foregroundStyle(Theme.secondaryText)
+            }
+            .padding(.top, 60)
+        case .failed(let message):
+            VStack(spacing: 8) {
+                Text("Nessun risultato").font(.headline)
+                Text(message).font(.subheadline).foregroundStyle(Theme.secondaryText).multilineTextAlignment(.center)
+            }
+            .padding(32)
+        default:
+            AssistantResults(assistant: assistant) { app.detailItem = $0 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, Theme.tabBarHeight + 20)
+        }
+    }
+
+    @ViewBuilder
+    private var classicResults: some View {
         if searching && results.isEmpty {
             ProgressView().tint(.white).padding(.top, 60)
         } else if let errorMessage {

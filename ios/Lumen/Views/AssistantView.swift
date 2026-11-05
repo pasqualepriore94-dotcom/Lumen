@@ -127,6 +127,29 @@ struct AssistantView: View {
     }
 
     private var results: some View {
+        AssistantResults(assistant: assistant) { item in
+            focused = false
+            selected = item
+        }
+    }
+
+    private func send() {
+        let q = question
+        focused = false
+        Task { await assistant.ask(q, app: app, library: library) }
+    }
+}
+
+
+/// Risultati di "Chiedi a Lumen" (titoli trovati, suggerimenti di Apple Intelligence, playlist),
+/// usati sia nella finestra dell'assistente sia nella scheda Cerca.
+struct AssistantResults: View {
+    @Environment(AppState.self) private var app
+    @Environment(Library.self) private var library
+    let assistant: LumenAssistant
+    var onSelect: (MediaItem) -> Void
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if !assistant.titleMatches.isEmpty {
                 section("Titoli trovati", icon: "magnifyingglass", assistant.titleMatches)
@@ -161,7 +184,7 @@ struct AssistantView: View {
     }
 
     private func pickButton(_ pick: LumenAssistant.Pick) -> some View {
-        Button { if let item = pick.item { focused = false; selected = item } } label: { row(pick) }
+        Button { if let item = pick.item { onSelect(item) } } label: { row(pick) }
             .buttonStyle(.plain)
             .disabled(pick.item == nil)
     }
@@ -196,9 +219,4 @@ struct AssistantView: View {
         .liquidGlassCard(radius: 18)
     }
 
-    private func send() {
-        let q = question
-        focused = false
-        Task { await assistant.ask(q, app: app, library: library) }
-    }
 }

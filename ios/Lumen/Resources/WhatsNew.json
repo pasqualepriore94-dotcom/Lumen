@@ -1,5 +1,23 @@
 [
   {
+    "version": "0.25.0",
+    "title": "Apple Intelligence in Lumen",
+    "items": [
+      {
+        "icon": "magnifyingglass",
+        "text": "La ricerca usa Apple Intelligence: scrivi un titolo oppure descrivi cosa ti va di vedere, e trovi titoli, suggerimenti e contenuti della tua playlist."
+      },
+      {
+        "icon": "text.book.closed",
+        "text": "Nella scheda di una serie, \"Dove eravamo rimasti?\" riassume senza spoiler gli episodi che hai visto."
+      },
+      {
+        "icon": "wand.and.stars",
+        "text": "Le voci della playlist senza scheda vengono rilette da Apple Intelligence (sigle, tag, errori di battitura) e cercate di nuovo nel catalogo."
+      }
+    ]
+  },
+  {
     "version": "0.24.0",
     "title": "Novità aggiunte da sole",
     "items": [

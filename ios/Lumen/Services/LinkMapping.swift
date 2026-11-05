@@ -45,7 +45,9 @@ final class LinkMapper {
     var cache: [String: CachedMatch] = [:]
     @ObservationIgnored var onProgress: (@MainActor () -> Void)?
     @ObservationIgnored private(set) var cancelled = false
-    @ObservationIgnored private var generation = 0
+    @ObservationIgnored var generation = 0
+    /// Fase in corso, per il contatore (es. riconoscimento con Apple Intelligence).
+    var phaseLabel: String?
 
     /// `keepCache`: le ricerche già fatte nel catalogo restano valide anche per le analisi successive
     /// (rianalizzare la stessa playlist è quasi immediato).
@@ -155,11 +157,12 @@ final class LinkMapper {
         total = seen.count
         done = already
 
-        guard let tmdb, !queries.isEmpty else { apply(grouped); onProgress?(); return }
+        phaseLabel = nil
+        guard let tmdb else { apply(grouped); onProgress?(); return }
         isMapping = true
         onProgress?()
 
-        await withTaskGroup(of: (String, Lookup).self) { group in
+        if !queries.isEmpty { await withTaskGroup(of: (String, Lookup).self) { group in
             var next = queries.makeIterator()
             for _ in 0..<Self.parallelism {
                 guard let q = next.next() else { break }
@@ -173,8 +176,12 @@ final class LinkMapper {
                 if done % 25 == 0 { onProgress?() }
                 if let q = next.next() { group.addTask { await Self.lookup(q, tmdb) } }
             }
-        }
-        guard gen == generation else { return }
+        } }
+        guard gen == generation, !cancelled else { return }
+        // Titoli rimasti senza scheda: Apple Intelligence ne ricava il nome pulito e si riprova.
+        await aiRescue(grouped, tmdb: tmdb, gen: gen)
+        guard gen == generation, !cancelled else { return }
+        phaseLabel = nil
         apply(grouped)
         isMapping = false
         onProgress?()
