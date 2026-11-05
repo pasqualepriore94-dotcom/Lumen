@@ -152,7 +152,11 @@ struct DetailView: View {
         return Color.clear
             // Con il trailer: anteprima alta a tutta pagina (come le app di streaming), senza controlli di YouTube.
             .aspectRatio(hasTrailer ? 0.82 : 16.0 / 9.0, contentMode: .fit)
-            .overlay(RemoteImage(url: hasTrailer ? (current.bestPosterImage ?? current.bestWideImage) : current.bestWideImage))
+            // La locandina si vede solo finché il trailer non parte, poi sparisce del tutto
+            .overlay(RemoteImage(url: hasTrailer ? (current.bestPosterImage ?? current.bestWideImage) : current.bestWideImage)
+                .opacity(hasTrailer && previewPlaying ? 0 : 1)
+                .animation(.easeInOut(duration: 0.6), value: previewPlaying))
+            .background(Color.black)
             .overlay {
                 if let id = previewId {
                     TrailerPreview(videoId: id, muted: previewMuted, paused: previewPaused || trailer != nil || previewStopped,

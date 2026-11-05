@@ -153,8 +153,8 @@ struct TrailerPreview: UIViewRepresentable {
         <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
         <meta name="referrer" content="strict-origin-when-cross-origin">
         <style>
-        html,body{margin:0;height:100%;background:transparent;overflow:hidden}
-        #p{position:fixed;left:50%;top:50%;\(cover ? "width:max(100vw,177.78vh);height:max(100vh,56.25vw);transform:translate(-50%,-50%) scale(1.12);" : "width:100%;height:100%;transform:translate(-50%,-50%);")pointer-events:\(controls ? "auto" : "none")}
+        html,body{margin:0;height:100%;background:\(cover ? "#000" : "transparent");overflow:hidden}
+        #p{position:fixed;left:50%;top:50%;\(cover ? "width:max(100vw,177.78vh);height:max(100vh,56.25vw);transform:translate(-50%,-50%) scale(1.32);" : "width:100%;height:100%;transform:translate(-50%,-50%);")pointer-events:\(controls ? "auto" : "none")}
         </style></head><body><div id="p"></div>
         <script>
         var player, wantMuted = \(muted), wantPaused = \(autoplay ? "false" : "true");
