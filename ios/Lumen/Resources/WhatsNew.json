@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.25.1",
+    "title": "Correzioni",
+    "items": [
+      {
+        "icon": "dot.radiowaves.left.and.right",
+        "text": "Torna la voce Dirette in Home → Categorie (il contatore delle dirette restava a zero)."
+      }
+    ]
+  },
+  {
     "version": "0.25.0",
     "title": "Apple Intelligence in Lumen",
     "items": [

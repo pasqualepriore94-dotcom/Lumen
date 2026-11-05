@@ -292,11 +292,16 @@ struct ParsedTitle: Hashable, Codable {
 final class LinkLibrary {
     static let shared = LinkLibrary()
 
-    private(set) var items: [LinkMedia] = [] {
-        didSet { liveCount = items.reduce(0) { $0 + ($1.isLive ? 1 : 0) } }
+    private(set) var items: [LinkMedia] = []
+    @ObservationIgnored private var liveCache: (count: Int, lives: Int) = (-1, 0)
+    /// Numero di dirette importate. Ricalcolato solo quando l'elenco cambia (prima un osservatore
+    /// sulla proprietà, che con @Observable non veniva eseguito: il contatore restava a 0 e la voce
+    /// Dirette spariva da Categorie).
+    var liveCount: Int {
+        let list = items
+        if liveCache.count != list.count { liveCache = (list.count, list.reduce(0) { $0 + ($1.isLive ? 1 : 0) }) }
+        return liveCache.lives
     }
-    /// Numero di dirette importate (aggiornato a ogni modifica, senza ricalcoli nella home).
-    private(set) var liveCount = 0
     /// id TMDB ("movie-123") → video
     private(set) var movieLinks: [String: LinkMedia] = [:]
     /// id TMDB della serie ("tv-456") → "s1e2" → video
