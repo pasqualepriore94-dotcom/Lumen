@@ -123,7 +123,7 @@ final class LumenAssistant {
                 if let result = value {
                     intro = result.0
                     let known = Set(titleMatches.map(\.id))
-                    picks = result.1.filter { !known.contains($0.id) }
+                    picks = result.1.filter { !known.contains($0.id) && !SuggestionFilter.shared.isDismissed($0.id) }
                 }
             } catch {
                 guard rid == requestId else { return }
@@ -226,6 +226,7 @@ final class LumenAssistant {
         Non inventare titoli. Indica l'anno corretto. Spiega in breve perché ogni titolo è adatto, senza spoiler.
         \(favorites.isEmpty ? "" : "Generi preferiti dell'utente: \(favorites).")
         \(seen.isEmpty ? "" : "Titoli già visti (non riproporli, salvo richiesta esplicita): \(seen).")
+        \(SuggestionFilter.shared.promptList.isEmpty ? "" : "Titoli scartati dall'utente (non proporli mai): \(SuggestionFilter.shared.promptList).")
         \(candidates.isEmpty ? "" : "Titoli già disponibili da guardare in Lumen, da preferire quando sono pertinenti: \(candidates).")
         """
     }

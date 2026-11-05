@@ -26,19 +26,90 @@ final class IntentRouter {
         pending = action
         token += 1
     }
+
+    /// Legge la richiesta lasciata da Siri (anche se l'app era chiusa o ancora in avvio).
+    func pullInbox() {
+        guard let raw = IntentInbox.take() else { return }
+        if raw == "resume" { send(.resume) }
+        else if raw.hasPrefix("ask:") { send(.ask(String(raw.dropFirst(4)))) }
+        else if raw.hasPrefix("open:") { send(.open(String(raw.dropFirst(5)))) }
+    }
+}
+
+/// Casella di passaggio tra i comandi di Siri e l'app: i comandi rispondono subito
+/// (senza aspettare che l'app abbia finito di avviarsi, causa di "Qualcosa è andato storto").
+enum IntentInbox {
+    private static let key = "lumen.intent.inbox"
+
+    static func put(_ value: String) {
+        UserDefaults.standard.set(value, forKey: key)
+        Task { @MainActor in IntentRouter.shared.pullInbox() }
+    }
+
+    static func take() -> String? {
+        guard let v = UserDefaults.standard.string(forKey: key) else { return nil }
+        UserDefaults.standard.removeObject(forKey: key)
+        return v
+    }
+
+    /// Titoli delle categorie su misura salvate (lette dal file, senza passare dall'app).
+    static func suggestedTitles(limit: Int) -> [String] {
+        struct Item: Decodable { var id: String; var title: String }
+        struct Row: Decodable { var items: [Item] }
+        struct Saved: Decodable { var rows: [Row] }
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        guard let data = try? Data(contentsOf: dir.appendingPathComponent("personal-rows.json")),
+              let saved = try? JSONDecoder().decode(Saved.self, from: data) else { return [] }
+        let dismissed: Set<String> = {
+            guard let d = UserDefaults.standard.data(forKey: "lumen.dismissedSuggestions"),
+                  let list = try? JSONDecoder().decode([Item].self, from: d) else { return [] }
+            return Set(list.map(\.id))
+        }()
+        // Il primo titolo di ogni categoria, poi il secondo, …
+        var out: [String] = []
+        var seen = Set<String>()
+        let rows = saved.rows.map { $0.items.filter { !dismissed.contains($0.id) } }
+        for i in 0..<(rows.map(\.count).max() ?? 0) {
+            for r in rows where i < r.count && seen.insert(r[i].id).inserted {
+                out.append(r[i].title)
+                if out.count == limit { return out }
+            }
+        }
+        return out
+    }
+
+    /// Ultimo titolo che stavi guardando.
+    static func lastWatching() -> (title: String, episode: String?)? {
+        struct Item: Decodable { var title: String }
+        struct Progress: Decodable { var item: Item; var episodeLabel: String?; var updatedAt: Date }
+        guard let d = UserDefaults.standard.data(forKey: "lumen.progress"),
+              let map = try? JSONDecoder().decode([String: Progress].self, from: d),
+              let last = map.values.max(by: { $0.updatedAt < $1.updatedAt }) else { return nil }
+        return (last.item.title, last.episodeLabel)
+    }
+
+    static func list(_ titles: [String]) -> String {
+        guard titles.count > 1 else { return titles.first ?? "" }
+        return titles.dropLast().joined(separator: ", ") + " e " + titles.last!
+    }
 }
 
 // MARK: - Comandi di Siri
 
 struct WhatToWatchIntent: AppIntent {
     static var title: LocalizedStringResource = "Cosa guardo stasera"
-    static var description = IntentDescription("Apre Lumen con i consigli di Apple Intelligence in base ai tuoi gusti.")
+    static var description = IntentDescription("Ti dice cosa guardare stasera in base ai tuoi gusti e apre i consigli in Lumen.")
     static var openAppWhenRun = true
 
-    @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        IntentRouter.shared.send(.ask("Cosa mi consigli di guardare stasera?"))
-        return .result(dialog: "Ecco cosa ti propone Lumen per stasera.")
+        IntentInbox.put("ask:Cosa mi consigli di guardare stasera?")
+        let titles = IntentInbox.suggestedTitles(limit: 3)
+        if titles.isEmpty {
+            return .result(dialog: IntentDialog(full: "Ecco i consigli di Lumen per stasera.", supporting: "Ecco i consigli per stasera."))
+        }
+        let text = "Stasera ti propongo \(IntentInbox.list(titles)). Trovi altri consigli in Lumen."
+        return .result(dialog: IntentDialog(full: LocalizedStringResource(stringLiteral: text),
+                                            supporting: LocalizedStringResource(stringLiteral: text)))
     }
 }
 
@@ -50,9 +121,8 @@ struct SearchLumenIntent: AppIntent {
     @Parameter(title: "Cosa cerchi", requestValueDialog: "Cosa vuoi cercare su Lumen?")
     var query: String
 
-    @MainActor
     func perform() async throws -> some IntentResult {
-        IntentRouter.shared.send(.ask(query))
+        IntentInbox.put("ask:" + query)
         return .result()
     }
 }
@@ -62,10 +132,14 @@ struct ResumeWatchingIntent: AppIntent {
     static var description = IntentDescription("Apre l'ultimo film o l'ultima serie che stavi guardando.")
     static var openAppWhenRun = true
 
-    @MainActor
-    func perform() async throws -> some IntentResult {
-        IntentRouter.shared.send(.resume)
-        return .result()
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        IntentInbox.put("resume")
+        guard let last = IntentInbox.lastWatching() else {
+            return .result(dialog: "Non stai guardando nulla al momento: apro Lumen.")
+        }
+        let text = "Riprendo \(last.title)" + (last.episode.map { ", \($0)" } ?? "") + "."
+        return .result(dialog: IntentDialog(full: LocalizedStringResource(stringLiteral: text),
+                                            supporting: LocalizedStringResource(stringLiteral: text)))
     }
 }
 

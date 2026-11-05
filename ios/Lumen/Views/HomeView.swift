@@ -17,6 +17,7 @@ struct HomeView: View {
     @State private var showLive = false
     @State private var showAssistant = false
     @State private var showCustom = false
+    @State private var showDismissed = false
 
     var body: some View {
         // Intestazione fuori dallo ScrollView (prima era un inserto di area sicura: insieme al
@@ -48,8 +49,7 @@ struct HomeView: View {
                         ForEach(PersonalRows.shared.rows) { row in
                             let items = row.items.filter(matches)
                             if items.count >= 3 {
-                                SectionRow(section: CatalogSection(id: row.id, title: row.title, style: nil, items: items),
-                                           badge: "sparkles")
+                                SuggestionRow(section: CatalogSection(id: row.id, title: row.title, style: nil, items: items))
                                     .id(row.id)
                             }
                         }
@@ -106,6 +106,7 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showLive) { LiveChannelsView() }
         .sheet(isPresented: $showAssistant) { AssistantView() }
+        .sheet(isPresented: $showDismissed) { DismissedSuggestionsView() }
         .sheet(isPresented: $showCustom) {
             SectionGridView(section: CatalogSection(id: "custom", title: "Altri contenuti", style: nil,
                                                     items: LinkLibrary.shared.customItems))
@@ -157,6 +158,9 @@ struct HomeView: View {
                             Task { await PersonalRows.shared.refreshIfNeeded(app: app, library: library, force: true) }
                         }
                         .disabled(PersonalRows.shared.generating)
+                    }
+                    if !SuggestionFilter.shared.dismissed.isEmpty {
+                        Button("Titoli scartati (\(SuggestionFilter.shared.dismissed.count))", systemImage: "eye.slash") { showDismissed = true }
                     }
                     if !LinkLibrary.shared.documentaryItems.isEmpty {
                         Button("Documentari (\(LinkLibrary.shared.documentaryItems.count))", systemImage: "film.stack") {
@@ -370,6 +374,115 @@ struct HeroCard: View {
 }
 
 // MARK: - Righe
+
+/// Riga di una categoria su misura: sotto ogni locandina "La mia lista" e "Scarta".
+struct SuggestionRow: View {
+    @Environment(AppState.self) private var app
+    @Environment(Library.self) private var library
+    let section: CatalogSection
+    @State private var showAll = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles").font(.system(size: 11, weight: .bold))
+                Text("Su misura per te · \(section.items.count) titoli").font(.system(size: 11, weight: .bold))
+            }
+            .foregroundStyle(Theme.secondaryText)
+            .padding(.horizontal, 16)
+            .padding(.bottom, -8)
+            SectionHeader(title: section.title, actionTitle: "Mostra tutto") { showAll = true }
+            ScrollView(.horizontal) {
+                LazyHStack(alignment: .top, spacing: 8) {
+                    ForEach(section.items) { item in
+                        VStack(spacing: 6) {
+                            Button { app.detailItem = item } label: { PosterCard(item: item) }
+                                .buttonStyle(.plain)
+                            SuggestionButtons(item: item, compact: true)
+                        }
+                        .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .animation(.snappy, value: section.items.map(\.id))
+            }
+            .scrollIndicators(.hidden)
+        }
+        .sheet(isPresented: $showAll) { SectionGridView(section: section) }
+    }
+}
+
+/// "La mia lista" (salvalo per dopo) e "Scarta" (non proporlo più).
+struct SuggestionButtons: View {
+    @Environment(Library.self) private var library
+    let item: MediaItem
+    var compact = false
+
+    var body: some View {
+        let inList = library.contains(item)
+        HStack(spacing: 6) {
+            Button {
+                withAnimation(.snappy) { library.toggle(item) }
+            } label: {
+                Label(compact ? "Lista" : (inList ? "Nella mia lista" : "La mia lista"),
+                      systemImage: inList ? "checkmark" : "plus")
+                    .font(.system(size: compact ? 11 : 13, weight: .bold))
+                    .lineLimit(1)
+                    .frame(maxWidth: compact ? .infinity : nil)
+                    .padding(.horizontal, compact ? 0 : 12)
+                    .frame(height: compact ? 30 : 34)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(GlassButtonStyle(tint: inList ? .green : nil))
+            .accessibilityLabel(inList ? "Togli dalla mia lista" : "Aggiungi alla mia lista")
+            Button {
+                withAnimation(.snappy) { SuggestionFilter.shared.dismiss(item) }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: compact ? 11 : 13, weight: .bold))
+                    .frame(width: compact ? 30 : 34, height: compact ? 30 : 34)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(GlassButtonStyle())
+            .accessibilityLabel("Scarta: non propormelo più")
+        }
+        .frame(width: compact ? 112 : nil)
+    }
+}
+
+/// Titoli scartati, da rimettere tra i consigli.
+struct DismissedSuggestionsView: View {
+    @Environment(\.dismiss) private var close
+    private var filter: SuggestionFilter { SuggestionFilter.shared }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if filter.dismissed.isEmpty {
+                    Text("Nessun titolo scartato.").foregroundStyle(Theme.secondaryText)
+                }
+                ForEach(filter.dismissed) { item in
+                    HStack(spacing: 12) {
+                        ImageTile(url: item.bestPosterImage, width: 44, height: 66, corner: 6)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(item.title).font(.subheadline.weight(.semibold))
+                            Text([item.isSeries ? "Serie TV" : "Film", item.year.map(String.init)].compactMap { $0 }.joined(separator: " · "))
+                                .font(.caption).foregroundStyle(Theme.secondaryText)
+                        }
+                        Spacer()
+                        Button("Ripristina") { withAnimation { filter.restore(item.id) } }
+                            .font(.caption.weight(.bold))
+                            .buttonStyle(.borderless)
+                    }
+                }
+            }
+            .navigationTitle("Titoli scartati")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Fine") { close() } } }
+        }
+        .preferredColorScheme(.dark)
+    }
+}
 
 struct SectionRow: View {
     let section: CatalogSection

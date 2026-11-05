@@ -172,6 +172,9 @@ struct RootView: View {
         }
         // Comandi di Siri e Comandi rapidi
         .onChange(of: IntentRouter.shared.token) { handleIntent() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            IntentRouter.shared.pullInbox()
+        }
         .sheet(item: Binding(get: { app.approvalRequest }, set: { app.approvalRequest = $0 })) { ApprovalSheet(request: $0) }
         .sheet(item: Binding(get: { app.announcement }, set: { app.announcement = $0 })) { AnnouncementSheet(notification: $0) }
         .onChange(of: library.activitySignature) { AchievementTracker.shared.check(library) }
@@ -184,6 +187,7 @@ struct RootView: View {
             }
             KeyboardDismisser.shared.install()
             AppIconMemory.restoreIfNeeded()
+            IntentRouter.shared.pullInbox()
             handleIntent()
             Task { @MainActor in
                 // Titoli guardabili nella ricerca di iPhone (dopo l'avvio, solo se sono cambiati)

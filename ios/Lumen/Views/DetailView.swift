@@ -65,6 +65,7 @@ struct DetailView: View {
                     recapCard
                     customMatchCard
                     mainActions
+                    suggestionControl
                     if auth.isAdmin && (movieLink != nil || seriesHasLinks) {
                         Button(role: .destructive) {
                             withAnimation { links.removeMatch(itemId: current.id) }
@@ -433,6 +434,27 @@ struct DetailView: View {
             let t = await PlotWriter.translate(id: detail.item.id, text: text)
             translating = false
             if let t { withAnimation { translatedOverview = t } }
+        }
+    }
+
+    /// "Scarta" per i titoli proposti nelle categorie su misura (o "Ripristina" se scartato).
+    @ViewBuilder
+    private var suggestionControl: some View {
+        let filter = SuggestionFilter.shared
+        if filter.isDismissed(current.id) {
+            Button { withAnimation { filter.restore(current.id) } } label: {
+                Label("Scartato dai consigli · Ripristina", systemImage: "arrow.uturn.backward")
+                    .font(.footnote.weight(.semibold))
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(Theme.secondaryText)
+        } else if PersonalRows.shared.rows.contains(where: { $0.items.contains { $0.id == current.id } }) {
+            Button { withAnimation { filter.dismiss(current) } } label: {
+                Label("Non mi interessa: non propormelo più", systemImage: "hand.thumbsdown")
+                    .font(.footnote.weight(.semibold))
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(Theme.secondaryText)
         }
     }
 

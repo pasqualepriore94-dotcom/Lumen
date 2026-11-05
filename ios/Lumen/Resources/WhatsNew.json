@@ -1,5 +1,23 @@
 [
   {
+    "version": "0.32.0",
+    "title": "Consigli più ricchi",
+    "items": [
+      {
+        "icon": "rectangle.stack.fill",
+        "text": "Le categorie su misura ora hanno fino a 40 titoli ciascuna: ai suggerimenti di Apple Intelligence si aggiungono titoli simili da TMDB e dalla tua playlist."
+      },
+      {
+        "icon": "xmark.circle",
+        "text": "Sotto ogni titolo consigliato: «Lista» per salvarlo per dopo e ✕ per scartarlo. I titoli scartati non vengono più proposti; li ritrovi in Categorie → Titoli scartati, dove puoi ripristinarli."
+      },
+      {
+        "icon": "mic.fill",
+        "text": "Siri: «Cosa guardo stasera su Lumen» e «Riprendi la visione su Lumen» rispondono subito (con i titoli consigliati o quello da riprendere) e poi aprono l'app."
+      }
+    ]
+  },
+  {
     "version": "0.31.0",
     "title": "Apple Intelligence ovunque",
     "items": [

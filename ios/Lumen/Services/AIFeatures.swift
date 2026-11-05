@@ -158,6 +158,49 @@ enum PlotWriter {
     }
 }
 
+// MARK: - Titoli scartati dai consigli
+
+/// Titoli che hai scartato: non vengono più proposti (categorie su misura e suggerimenti di Apple Intelligence).
+@MainActor
+@Observable
+final class SuggestionFilter {
+    static let shared = SuggestionFilter()
+    private static let key = "lumen.dismissedSuggestions"
+
+    /// Più recenti per primi.
+    private(set) var dismissed: [MediaItem] = []
+    @ObservationIgnored private var ids: Set<String> = []
+
+    private init() {
+        if let data = UserDefaults.standard.data(forKey: Self.key),
+           let list = try? JSONDecoder().decode([MediaItem].self, from: data) {
+            dismissed = list
+            ids = Set(list.map(\.id))
+        }
+    }
+
+    func isDismissed(_ id: String) -> Bool { ids.contains(id) }
+
+    func dismiss(_ item: MediaItem) {
+        guard ids.insert(item.id).inserted else { return }
+        dismissed.insert(item, at: 0)
+        save()
+    }
+
+    func restore(_ id: String) {
+        guard ids.remove(id) != nil else { return }
+        dismissed.removeAll { $0.id == id }
+        save()
+    }
+
+    /// Per il modello: "non proporre questi titoli".
+    var promptList: String { dismissed.prefix(40).map(\.title).joined(separator: "; ") }
+
+    private func save() {
+        if let data = try? JSONEncoder().encode(dismissed) { UserDefaults.standard.set(data, forKey: Self.key) }
+    }
+}
+
 // MARK: - 5. Categorie su misura in Home
 
 @MainActor
@@ -177,7 +220,13 @@ final class PersonalRows {
         var rows: [Row]
     }
 
-    private(set) var rows: [Row] = []
+    private var storedRows: [Row] = []
+    /// Righe da mostrare (senza i titoli scartati).
+    var rows: [Row] {
+        let filter = SuggestionFilter.shared
+        _ = filter.dismissed.count
+        return storedRows.map { r in var r = r; r.items.removeAll { filter.isDismissed($0.id) }; return r }
+    }
     private(set) var generating = false
     @ObservationIgnored private var savedDate: Date?
     @ObservationIgnored private var savedSignature = 0
@@ -190,8 +239,9 @@ final class PersonalRows {
 
     private init() {
         if let data = try? Data(contentsOf: file), let s = try? JSONDecoder().decode(Saved.self, from: data) {
-            rows = s.rows
-            savedDate = s.date
+            storedRows = s.rows
+            // Le righe salvate con la versione precedente (8 titoli) vengono rigenerate più lunghe.
+            savedDate = s.rows.contains { $0.items.count > 12 } ? s.date : nil = s.date
             savedSignature = s.signature
         }
     }
@@ -210,7 +260,7 @@ final class PersonalRows {
         generating = true
         defer { generating = false }
         guard let fresh = await generate(app: app, library: library), !fresh.isEmpty else { return }
-        rows = fresh
+        storedRows = fresh
         savedDate = Date()
         savedSignature = signature
         if let data = try? JSONEncoder().encode(Saved(date: Date(), signature: signature, rows: fresh)) {
@@ -232,16 +282,18 @@ final class PersonalRows {
             .prefix(45)
             .map { "\($0.title)\($0.isSeries ? " (serie)" : "")" }
             .joined(separator: "; ")
+        let dismissedList = SuggestionFilter.shared.promptList
         let session = LanguageModelSession(instructions: """
         Sei l'assistente di Lumen, un'app per guardare film e serie TV. Rispondi in italiano.
         Crea 3 categorie su misura per la home dell'utente, basate sui suoi gusti, con nomi originali e specifici
         (esempi: "Thriller psicologici per te", "Serie brevi da finire in un weekend", "Commedie per staccare la testa").
-        Ogni categoria ha 8 film o serie TV reali ed esistenti, coerenti con il nome, che l'utente non ha ancora visto.
+        Ogni categoria ha 10 film o serie TV reali ed esistenti, coerenti con il nome, che l'utente non ha ancora visto.
         Preferisci i titoli già disponibili in Lumen quando sono adatti. Non inventare titoli.
         """)
         let prompt = """
         Generi preferiti: \(favorites)
         Titoli già visti (non riproporli): \(seen)
+        \(dismissedList.isEmpty ? "" : "Titoli che all'utente non interessano (non proporli mai): \(dismissedList)")
         \(candidates.isEmpty ? "" : "Titoli disponibili in Lumen: \(candidates)")
         """
         guard let response = try? await session.respond(to: prompt, generating: AIRows.self, options: GenerationOptions(temperature: 0.6))
@@ -253,7 +305,7 @@ final class PersonalRows {
         var out: [Row] = []
         var used = Set<String>()
         for (r, row) in response.content.rows.enumerated() {
-            let picks = Array(row.picks.prefix(10))
+            let picks = Array(row.picks.prefix(12))
             var found: [Int: MediaItem] = [:]
             await withTaskGroup(of: (Int, MediaItem?).self) { group in
                 for (i, p) in picks.enumerated() {
@@ -264,8 +316,39 @@ final class PersonalRows {
                 }
                 for await (i, item) in group { if let item { found[i] = item } }
             }
-            let items = picks.indices.compactMap { found[$0] }
-                .filter { !seenIds.contains($0.id) && used.insert($0.id).inserted }
+            let seeds = picks.indices.compactMap { found[$0] }
+            // Generi della categoria: i più frequenti tra i titoli proposti dal modello
+            var counts: [String: Int] = [:]
+            for s in seeds { for g in s.tags ?? [] { counts[g, default: 0] += 1 } }
+            let rowGenres = Set(counts.sorted { $0.value > $1.value }.prefix(2).map(\.key))
+            let main = counts.max { $0.value < $1.value }?.key
+            // Più titoli: consigliati da TMDB a partire dai primi titoli della categoria…
+            var recs: [MediaItem] = []
+            if let tmdb {
+                await withTaskGroup(of: [MediaItem].self) { group in
+                    for s in seeds.prefix(5) where s.id.hasPrefix("movie-") || s.id.hasPrefix("tv-") {
+                        let id = s.id
+                        group.addTask { await tmdb.recommendations(for: id) }
+                    }
+                    for await list in group { recs += list }
+                }
+            }
+            recs = recs.filter { !Set($0.tags ?? []).isDisjoint(with: rowGenres) }
+                .sorted { (taste.compatibility($0) ?? 50) > (taste.compatibility($1) ?? 50) }
+            // …e dalla tua playlist, dello stesso genere e compatibili con i tuoi gusti
+            var fromPlaylist: [MediaItem] = []
+            if let g = main {
+                let scored = links.matchedItems.values
+                    .filter { ($0.tags ?? []).contains(g) }
+                    .map { ($0, taste.compatibility($0) ?? 0) }
+                    .filter { $0.1 >= 60 }
+                    .sorted { $0.1 > $1.1 }
+                fromPlaylist = scored.prefix(15).map(\.0)
+            }
+            let filter = SuggestionFilter.shared
+            let items = (seeds + fromPlaylist + recs)
+                .filter { !seenIds.contains($0.id) && !filter.isDismissed($0.id) && used.insert($0.id).inserted }
+                .prefix(40)
             // Prima quelli che si possono guardare subito
             let sorted = items.enumerated().sorted { a, b in
                 let av = links.link(forItem: a.element.id) != nil || links.episodeCount(seriesId: a.element.id) > 0
@@ -273,7 +356,7 @@ final class PersonalRows {
                 return av != bv ? av : a.offset < b.offset
             }.map(\.element)
             let title = row.title.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "\"«»")))
-            if sorted.count >= 4, !title.isEmpty { out.append(Row(id: "ai-row-\(r)", title: title, items: sorted)) }
+            if sorted.count >= 6, !title.isEmpty { out.append(Row(id: "ai-row-\(r)", title: title, items: sorted)) }
         }
         return out
         #else
@@ -300,7 +383,7 @@ struct AIRows {
 struct AIRow {
     @Guide(description: "Nome originale della categoria, in italiano, massimo 6 parole")
     var title: String
-    @Guide(description: "8 film o serie TV reali ed esistenti adatti alla categoria", .count(8))
+    @Guide(description: "10 film o serie TV reali ed esistenti adatti alla categoria", .count(10))
     var picks: [AIRowPick]
 }
 

@@ -165,7 +165,7 @@ struct AssistantResults: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Label("Suggeriti da Apple Intelligence", systemImage: "sparkles").font(.headline).padding(.top, 6)
                     if !assistant.intro.isEmpty { Text(assistant.intro).font(.subheadline).foregroundStyle(Theme.secondaryText) }
-                    ForEach(assistant.picks) { pickButton($0) }
+                    ForEach(assistant.picks.filter { !SuggestionFilter.shared.isDismissed($0.id) }) { pickButton($0) }
                 }
             }
             if !assistant.playlistMatches.isEmpty {
@@ -184,9 +184,11 @@ struct AssistantResults: View {
     }
 
     private func pickButton(_ pick: LumenAssistant.Pick) -> some View {
-        Button { if let item = pick.item { onSelect(item) } } label: { row(pick) }
-            .buttonStyle(.plain)
-            .disabled(pick.item == nil)
+        // Tocco sulla scheda (non un Button: dentro ci sono i tasti "La mia lista" e "Scarta")
+        row(pick)
+            .contentShape(Rectangle())
+            .onTapGesture { if let item = pick.item { onSelect(item) } }
+            .accessibilityAddTraits(.isButton)
     }
 
     private func row(_ pick: LumenAssistant.Pick) -> some View {
@@ -211,6 +213,9 @@ struct AssistantResults: View {
                         .font(.caption.weight(.bold)).foregroundStyle(.green)
                 } else if pick.item == nil {
                     Text("Non trovato nel catalogo").font(.caption).foregroundStyle(Theme.secondaryText)
+                }
+                if let item = pick.item, assistant.picks.contains(where: { $0.id == pick.id }) {
+                    SuggestionButtons(item: item).padding(.top, 4)
                 }
             }
             Spacer(minLength: 0)

@@ -443,6 +443,20 @@ struct TMDBProvider: ContentProvider {
         throw ProviderError.notFound
     }
 
+    /// Titoli consigliati da TMDB a partire da un titolo (per allungare le categorie su misura).
+    func recommendations(for id: String, pages: Int = 1) async -> [MediaItem] {
+        guard let pair = try? Self.split(id) else { return [] }
+        let kind = pair.0, tmdbId = pair.1
+        let genres = (try? await genreMap()) ?? [:]
+        var out: [MediaItem] = []
+        for page in 1...max(1, pages) {
+            guard let json = try? await get("/\(kind == .movie ? "movie" : "tv")/\(tmdbId)/recommendations", ["page": "\(page)"])
+            else { break }
+            out += (json["results"] as? [[String: Any]] ?? []).compactMap { item(from: $0, kind: kind, genres: genres) }
+        }
+        return out
+    }
+
     private func genreMap() async throws -> [Int: String] {
         if let cached = await TMDBCache.shared.genres(for: language) { return cached }
         async let movies = get("/genre/movie/list")
