@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.34.0",
+    "title": "Pagine degli attori",
+    "items": [
+      {
+        "icon": "person.crop.rectangle",
+        "text": "Tocca un attore nel cast: si apre la sua pagina con foto, biografia (tradotta se c'è solo in inglese), data e luogo di nascita, età e link a IMDb e Instagram."
+      },
+      {
+        "icon": "film.stack",
+        "text": "Nella pagina trovi i suoi titoli: quelli da guardare subito in Lumen, quelli per cui è più conosciuto, tutti i film e le serie (dal più recente) e i film che ha diretto."
+      }
+    ]
+  },
+  {
     "version": "0.33.1",
     "title": "Saghe complete",
     "items": [

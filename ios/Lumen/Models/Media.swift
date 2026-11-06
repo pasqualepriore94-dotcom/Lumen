@@ -184,11 +184,13 @@ struct CastMember: Codable, Hashable, Identifiable {
     var name: String
     var character: String?
     var photo: URL?
+    /// Id TMDB della persona (per aprire la sua pagina).
+    var personId: Int?
 
-    enum CodingKeys: String, CodingKey { case name, character, photo }
+    enum CodingKeys: String, CodingKey { case name, character, photo, personId }
 
-    init(name: String, character: String? = nil, photo: URL? = nil) {
-        self.name = name; self.character = character; self.photo = photo
+    init(name: String, character: String? = nil, photo: URL? = nil, personId: Int? = nil) {
+        self.name = name; self.character = character; self.photo = photo; self.personId = personId
     }
 
     /// Accetta sia "Nome Cognome" sia { "name": …, "character": …, "photo": … }.
@@ -201,6 +203,7 @@ struct CastMember: Codable, Hashable, Identifiable {
         name = c.lossyString(.name) ?? "?"
         character = c.lossyString(.character)
         photo = c.lossyURL(.photo)
+        personId = try? c.decodeIfPresent(Int.self, forKey: .personId)
     }
 }
 
@@ -434,4 +437,25 @@ extension Season {
     init(id: String, number: Int, title: String? = nil, episodes: [Episode]) {
         self.id = id; self.number = number; self.title = title; self.episodes = episodes
     }
+}
+
+/// Pagina di un attore o di una persona del cast.
+struct PersonDetail: Hashable {
+    var id: Int
+    var name: String
+    var photo: URL?
+    var biography: String?
+    var biographyIsEnglish = false
+    var birthday: Date?
+    var deathday: Date?
+    var placeOfBirth: String?
+    var department: String?
+    /// I titoli per cui è più conosciuto (più votati).
+    var knownFor: [MediaItem] = []
+    var movies: [MediaItem] = []
+    var series: [MediaItem] = []
+    /// Come regista (film diretti).
+    var directed: [MediaItem] = []
+    var imdbId: String?
+    var instagram: String?
 }

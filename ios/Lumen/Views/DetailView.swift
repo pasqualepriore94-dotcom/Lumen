@@ -16,6 +16,7 @@ struct DetailView: View {
     @State private var watchSummary: WatchedEntry?
     @State private var trailer: TrailerItem?
     @State private var sagaItem: MediaItem?
+    @State private var castPerson: CastMember?
     @State private var showManualMatch = false
     @State private var recapText: String?
     @State private var recapLoading = false
@@ -138,6 +139,7 @@ struct DetailView: View {
         .playbackHUD()
         .sheet(item: $watchSummary) { WatchTimeView(highlight: $0) }
         .sheet(item: $sagaItem) { DetailView(item: $0) }
+        .sheet(item: $castPerson) { PersonView(member: $0) }
         .fullScreenCover(item: $trailer) { t in
             TrailerPlayerView(title: current.title, url: t.url)
         }
@@ -724,10 +726,14 @@ struct DetailView: View {
 
     private func castCarousel(_ cast: [CastMember]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Cast").font(.headline)
+            HStack(spacing: 6) {
+                Text("Cast").font(.headline)
+                Text("Tocca un attore per i suoi film").font(.caption).foregroundStyle(Theme.secondaryText)
+            }
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 12) {
                     ForEach(cast) { person in
+                        Button { if person.personId != nil { castPerson = person } } label: {
                         VStack(spacing: 6) {
                             Group {
                                 if person.photo != nil {
@@ -746,6 +752,10 @@ struct DetailView: View {
                             }
                         }
                         .frame(width: 86)
+                        .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Apre la pagina dell'attore")
                     }
                 }
             }

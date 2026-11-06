@@ -214,7 +214,7 @@ struct TMDBProvider: ContentProvider {
         let cast: [CastMember] = (credits["cast"] as? [[String: Any]] ?? []).prefix(15).compactMap { c in
             guard let name = c["name"] as? String else { return nil }
             return CastMember(name: name, character: (c["character"] as? String).flatMap { $0.isEmpty ? nil : $0 },
-                              photo: image(c["profile_path"], size: "w185"))
+                              photo: image(c["profile_path"], size: "w185"), personId: c["id"] as? Int)
         }
         var director: String?
         if isMovie {
@@ -449,6 +449,53 @@ struct TMDBProvider: ContentProvider {
         if id.hasPrefix("movie-") { return (.movie, String(id.dropFirst(6))) }
         if id.hasPrefix("tv-") { return (.series, String(id.dropFirst(3))) }
         throw ProviderError.notFound
+    }
+
+    /// Pagina di una persona: biografia, dati anagrafici e tutti i film e le serie in cui ha lavorato.
+    func person(id: Int) async throws -> PersonDetail {
+        guard !key.isEmpty else { throw TMDBError.missingKey }
+        let json = try await get("/person/\(id)", ["append_to_response": "combined_credits,external_ids"])
+        let genres = (try? await genreMap()) ?? [:]
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd"
+        df.locale = Locale(identifier: "en_US_POSIX")
+        var p = PersonDetail(id: id, name: json["name"] as? String ?? "",
+                             photo: image(json["profile_path"], size: "h632"))
+        p.biography = (json["biography"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        if p.biography == nil, !language.hasPrefix("en"),
+           let en = try? await get("/person/\(id)", ["language": "en-US"]),
+           let bio = en["biography"] as? String, !bio.isEmpty {
+            p.biography = bio
+            p.biographyIsEnglish = true
+        }
+        p.birthday = (json["birthday"] as? String).flatMap(df.date(from:))
+        p.deathday = (json["deathday"] as? String).flatMap(df.date(from:))
+        p.placeOfBirth = (json["place_of_birth"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        p.department = json["known_for_department"] as? String
+        let ext = json["external_ids"] as? [String: Any] ?? [:]
+        p.imdbId = (ext["imdb_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        p.instagram = (ext["instagram_id"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+
+        let credits = json["combined_credits"] as? [String: Any] ?? [:]
+        let cast = credits["cast"] as? [[String: Any]] ?? []
+        // Niente talk show, premiazioni e simili (generi TV 10767 talk, 10763 news, 10764 reality)
+        let noise: Set<Int> = [10767, 10763, 10764]
+        func items(_ list: [[String: Any]]) -> [(MediaItem, Double, Int)] {
+            var seen = Set<String>()
+            return list.compactMap { j -> (MediaItem, Double, Int)? in
+                if let g = j["genre_ids"] as? [Int], !Set(g).isDisjoint(with: noise) { return nil }
+                guard let it = item(from: j, kind: nil, genres: genres), seen.insert(it.id).inserted else { return nil }
+                return (it, j["popularity"] as? Double ?? 0, j["vote_count"] as? Int ?? 0)
+            }
+        }
+        let all = items(cast)
+        let byDate: (MediaItem, MediaItem) -> Bool = { ($0.year ?? 9999) > ($1.year ?? 9999) }
+        p.movies = all.filter { !$0.0.isSeries }.map(\.0).sorted(by: byDate)
+        p.series = all.filter { $0.0.isSeries && $0.2 > 0 }.map(\.0).sorted(by: byDate)
+        p.knownFor = all.filter { $0.0.poster != nil }.sorted { $0.2 > $1.2 }.prefix(12).map(\.0)
+        let crew = (credits["crew"] as? [[String: Any]] ?? []).filter { $0["job"] as? String == "Director" }
+        p.directed = items(crew).map(\.0).sorted(by: byDate)
+        return p
     }
 
     /// Titoli consigliati da TMDB a partire da un titolo (per allungare le categorie su misura).
