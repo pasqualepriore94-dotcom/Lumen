@@ -249,8 +249,13 @@ struct DetailView: View {
         return VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(detail.collectionName ?? "La saga").font(.headline)
-                Text(index.map { "Capitolo \($0 + 1) di \(parts.count)" + ($0 + 1 < parts.count ? " · guarda i successivi" : "") }
-                     ?? "\(parts.count) film")
+                Text(index.map { i -> String in
+                    let before = i, after = parts.count - i - 1
+                    var text = "Capitolo \(i + 1) di \(parts.count)"
+                    if before > 0 { text += " · \(before == 1 ? "1 precedente" : "\(before) precedenti")" }
+                    if after > 0 { text += " · \(after == 1 ? "1 successivo" : "\(after) successivi")" }
+                    return text
+                } ?? "\(parts.count) film")
                     .font(.caption).foregroundStyle(Theme.secondaryText)
             }
             ScrollViewReader { proxy in
@@ -272,7 +277,9 @@ struct DetailView: View {
                                                 .background(isCurrent ? app.accent : .black.opacity(0.6), in: Circle())
                                                 .padding(4)
                                         }
-                                    Text(isCurrent ? "Stai guardando" : (part.year.map(String.init) ?? ""))
+                                    Text(isCurrent ? "Stai guardando"
+                                         : ([part.year.map(String.init), index.map { i < $0 ? "prima" : "dopo" }]
+                                            .compactMap { $0 }.joined(separator: " · ")))
                                         .font(.caption2.weight(isCurrent ? .bold : .regular))
                                         .foregroundStyle(isCurrent ? app.accent : Theme.secondaryText)
                                     if links.link(forItem: part.id) != nil {
@@ -289,7 +296,11 @@ struct DetailView: View {
                     .padding(.horizontal, 2)
                 }
                 .scrollIndicators(.hidden)
-                .onAppear { proxy.scrollTo(current.id, anchor: .leading) }
+                // Si vede anche il capitolo precedente (prima la riga partiva dal film aperto e i precedenti restavano nascosti a sinistra)
+                .onAppear {
+                    guard let index else { return }
+                    proxy.scrollTo(parts[max(0, index - 1)].id, anchor: .leading)
+                }
             }
         }
     }

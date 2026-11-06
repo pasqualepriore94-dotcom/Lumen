@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.33.1",
+    "title": "Saghe complete",
+    "items": [
+      {
+        "icon": "film.stack",
+        "text": "Nella riga della saga si vedono anche i capitoli precedenti: la riga mostra il film prima di quello aperto, ogni locandina dice «prima» o «dopo» e in alto trovi quanti capitoli ci sono prima e dopo."
+      }
+    ]
+  },
+  {
     "version": "0.33.0",
     "title": "Ottimizzazione",
     "items": [
