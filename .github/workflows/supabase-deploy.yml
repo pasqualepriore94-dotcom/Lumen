@@ -42,7 +42,7 @@ jobs:
         if: steps.check.outputs.ready == 'true'
         run: supabase link --project-ref "$PROJECT_REF" -p "$SUPABASE_DB_PASSWORD"
 
-      - name: Crea/aggiorna la tabella utenti
+      - name: Crea/aggiorna le tabelle (utenti, abbinamenti TV)
         if: steps.check.outputs.ready == 'true'
         run: supabase db push --linked --yes -p "$SUPABASE_DB_PASSWORD" --include-all
 

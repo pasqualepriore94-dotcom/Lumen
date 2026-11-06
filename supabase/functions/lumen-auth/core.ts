@@ -29,6 +29,23 @@ export interface Store {
   list(): Promise<UserRow[]>;
 }
 
+/** Abbinamenti in corso tra una TV e il telefono (accesso con codice QR). */
+export interface PairRow {
+  code: string;
+  secret_hash: string;
+  status: "pending" | "approved";
+  token: string | null;
+  expires_at: string;
+}
+
+export interface PairStore {
+  create(row: PairRow): Promise<void>;
+  find(code: string): Promise<PairRow | null>;
+  approve(code: string, token: string): Promise<void>;
+  remove(code: string): Promise<void>;
+  purgeExpired(): Promise<void>;
+}
+
 export interface Mailer {
   send(to: string, subject: string, html: string): Promise<void>;
 }
@@ -39,10 +56,12 @@ export interface Env {
   publicUrl: string; // URL pubblico della funzione, usato nei link di attivazione
   appName: string;
   notifyUsers: boolean;
+  pairPageUrl: string; // pagina web per collegare la TV dal telefono
 }
 
 export interface Deps {
   store: Store;
+  pairs: PairStore;
   mailer: Mailer;
   env: Env;
 }
@@ -53,6 +72,8 @@ const MIN_PASSWORD = 8;
 const DEFAULT_ADMIN_PASSWORD = "admin";
 const MAX_FAILED = 5;                 // tentativi errati prima del blocco
 const LOCK_MINUTES = 15;
+const PAIR_MINUTES = 10;              // validità di un codice di abbinamento TV
+const PAIR_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // senza 0/O e 1/I
 const MAX_PENDING = 100;              // registrazioni in attesa oltre le quali si rifiutano le nuove
 
 // ---------- utilità ----------
@@ -249,6 +270,49 @@ async function currentUser(req: Request, deps: Deps): Promise<UserRow | null> {
   return (await currentSession(req, deps))?.user ?? null;
 }
 
+async function sha256(text: string): Promise<string> {
+  return b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(text))));
+}
+
+function pairCode(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  return Array.from(bytes, (b) => PAIR_ALPHABET[b % PAIR_ALPHABET.length]).join("");
+}
+
+function normalizeCode(raw: unknown): string {
+  return String(raw ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12);
+}
+
+type CredentialCheck = { user: UserRow } | { error: Response };
+
+/** Verifica username/email e password con blocco dopo troppi errori (usata da /login e dall'abbinamento TV). */
+async function checkCredentials(rawLogin: unknown, rawPassword: unknown, store: Store): Promise<CredentialCheck> {
+  const login = String(rawLogin ?? "").trim().toLowerCase().slice(0, 200);
+  const password = String(rawPassword ?? "").slice(0, 200);
+  const user = login.includes("@") ? await store.findByEmail(login) : await store.findByUsername(login);
+  if (user?.locked_until && new Date(user.locked_until).getTime() > Date.now()) {
+    const min = Math.ceil((new Date(user.locked_until).getTime() - Date.now()) / 60000);
+    return { error: fail(429, `Account bloccato per troppi tentativi errati: riprova tra ${min} minuti.`) };
+  }
+  if (!user || !(await verifyPassword(password, user.password_hash))) {
+    if (user) {
+      const failed = (user.failed_logins ?? 0) + 1;
+      await store.update(user.id, failed >= MAX_FAILED
+        ? { failed_logins: 0, locked_until: new Date(Date.now() + LOCK_MINUTES * 60000).toISOString() }
+        : { failed_logins: failed });
+    }
+    return { error: fail(401, "Username o password errati.") };
+  }
+  if (!user.approved) return { error: fail(403, "Account in attesa di attivazione da parte dell'amministratore.") };
+  let fresh = user;
+  const patch: Partial<UserRow> = {};
+  if ((user.failed_logins ?? 0) > 0 || user.locked_until) { patch.failed_logins = 0; patch.locked_until = null; }
+  // Hash con meno iterazioni di quelle attuali: aggiornato ora che conosciamo la password
+  if (Number(user.password_hash.split("$")[1]) < ITERATIONS) patch.password_hash = await hashPassword(password);
+  if (Object.keys(patch).length) fresh = await store.update(user.id, patch);
+  return { user: fresh };
+}
+
 async function readBody(req: Request): Promise<Record<string, unknown>> {
   try {
     const b = await req.json();
@@ -366,29 +430,10 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     if (route === "/login" && req.method === "POST") {
       if (rateLimited("login:" + clientIp(req), 20, 600)) return fail(429, "Troppi tentativi di accesso: riprova tra qualche minuto.");
       const b = await readBody(req);
-      const login = String(b.username ?? "").trim().toLowerCase().slice(0, 200);
       const password = String(b.password ?? "").slice(0, 200);
-      const user = login.includes("@") ? await store.findByEmail(login) : await store.findByUsername(login);
-      if (user?.locked_until && new Date(user.locked_until).getTime() > Date.now()) {
-        const min = Math.ceil((new Date(user.locked_until).getTime() - Date.now()) / 60000);
-        return fail(429, `Account bloccato per troppi tentativi errati: riprova tra ${min} minuti.`);
-      }
-      if (!user || !(await verifyPassword(password, user.password_hash))) {
-        if (user) {
-          const failed = (user.failed_logins ?? 0) + 1;
-          await store.update(user.id, failed >= MAX_FAILED
-            ? { failed_logins: 0, locked_until: new Date(Date.now() + LOCK_MINUTES * 60000).toISOString() }
-            : { failed_logins: failed });
-        }
-        return fail(401, "Username o password errati.");
-      }
-      if (!user.approved) return fail(403, "Account in attesa di attivazione da parte dell'amministratore.");
-      let fresh = user;
-      const patch: Partial<UserRow> = {};
-      if ((user.failed_logins ?? 0) > 0 || user.locked_until) { patch.failed_logins = 0; patch.locked_until = null; }
-      // Hash con meno iterazioni di quelle attuali: aggiornato ora che conosciamo la password
-      if (Number(user.password_hash.split("$")[1]) < ITERATIONS) patch.password_hash = await hashPassword(password);
-      if (Object.keys(patch).length) fresh = await store.update(user.id, patch);
+      const checked = await checkCredentials(b.username, password, store);
+      if ("error" in checked) return checked.error;
+      const fresh = checked.user;
       // Password predefinita (admin/admin): va cambiata prima di poter usare le funzioni di amministrazione
       const mustChange = password === DEFAULT_ADMIN_PASSWORD || password.length < MIN_PASSWORD;
       return json(200, { token: await issueToken(fresh, env, mustChange), user: publicUser(fresh), mustChangePassword: mustChange });
@@ -464,6 +509,58 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
         const updated = await store.update(target.id, patch);
         return json(200, { user: publicUser(updated) });
       }
+    }
+
+    // ---------- accesso dalla TV con il telefono ----------
+
+    // La TV chiede un codice e un segreto, mostra il QR e poi interroga /pair/poll.
+    if (route === "/pair/start" && req.method === "POST") {
+      if (rateLimited("pair:" + clientIp(req), 30, 600)) return fail(429, "Troppe richieste: riprova tra qualche minuto.");
+      await deps.pairs.purgeExpired();
+      const code = pairCode();
+      const secret = randomToken();
+      const expires = new Date(Date.now() + PAIR_MINUTES * 60000).toISOString();
+      await deps.pairs.create({ code, secret_hash: await sha256(secret), status: "pending", token: null, expires_at: expires });
+      return json(201, { code, secret, url: `${env.pairPageUrl}?code=${code}`, expiresIn: PAIR_MINUTES * 60 });
+    }
+
+    // Conferma dalla pagina aperta sul telefono inquadrando il QR (pagina statica tv.html su GitHub Pages).
+    if (route === "/pair/confirm" && req.method === "POST") {
+      if (rateLimited("login:" + clientIp(req), 20, 600)) return fail(429, "Troppi tentativi di accesso: riprova tra qualche minuto.");
+      const b = await readBody(req);
+      const code = normalizeCode(b.code);
+      const pair = code ? await deps.pairs.find(code) : null;
+      if (!pair || new Date(pair.expires_at).getTime() < Date.now()) {
+        return fail(404, "Codice non valido o scaduto: controlla quello mostrato sulla TV.");
+      }
+      if (pair.status === "approved") return json(200, { status: "approved" });
+      const password = String(b.password ?? "").slice(0, 200);
+      const checked = await checkCredentials(b.username, password, store);
+      if ("error" in checked) return checked.error;
+      if (password === DEFAULT_ADMIN_PASSWORD || password.length < MIN_PASSWORD) {
+        return fail(403, "Devi prima cambiare la password dall'app Lumen su iPhone.");
+      }
+      await deps.pairs.approve(code, await issueToken(checked.user, env));
+      return json(200, { status: "approved", username: checked.user.username });
+    }
+
+    // La TV controlla se il telefono ha completato l'accesso: il token si consegna una sola volta.
+    if (route === "/pair/poll" && req.method === "POST") {
+      if (rateLimited("poll:" + clientIp(req), 400, 600)) return fail(429, "Troppe richieste: riprova tra qualche minuto.");
+      const b = await readBody(req);
+      const code = normalizeCode(b.code);
+      const pair = code ? await deps.pairs.find(code) : null;
+      if (!pair || pair.secret_hash !== await sha256(String(b.secret ?? ""))) return fail(404, "Abbinamento non trovato.");
+      if (new Date(pair.expires_at).getTime() < Date.now()) {
+        await deps.pairs.remove(code);
+        return fail(410, "Codice scaduto.");
+      }
+      if (pair.status !== "approved" || !pair.token) return json(202, { status: "pending" });
+      await deps.pairs.remove(code);
+      const payload = await verifyJWT(pair.token, env.jwtSecret);
+      const user = typeof payload?.sub === "string" ? await store.findById(payload.sub) : null;
+      if (!user) return fail(410, "Codice scaduto.");
+      return json(200, { status: "approved", token: pair.token, user: publicUser(user) });
     }
 
     if (route === "/" || route === "/health") return json(200, { ok: true, service: "lumen-auth" });

@@ -3,7 +3,7 @@
 // Deploy:  supabase functions deploy lumen-auth --no-verify-jwt
 // Secret:  JWT_SECRET, ADMIN_EMAIL, RESEND_API_KEY  (facoltativi: RESEND_FROM, APP_NAME, NOTIFY_USERS)
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { handle, type Mailer, type NewUser, type Store, type UserRow } from "./core.ts";
+import { handle, type Mailer, type NewUser, type PairRow, type PairStore, type Store, type UserRow } from "./core.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const db = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
@@ -35,6 +35,21 @@ const store: Store = {
   },
 };
 
+const P = "lumen_pairings";
+const check = ({ error }: { error: { message: string } | null }) => { if (error) throw new Error(error.message); };
+
+const pairs: PairStore = {
+  create: async (row) => check(await db.from(P).insert(row)),
+  find: async (code) => {
+    const { data, error } = await db.from(P).select("*").eq("code", code).maybeSingle();
+    if (error) throw new Error(error.message);
+    return (data as PairRow) ?? null;
+  },
+  approve: async (code, token) => check(await db.from(P).update({ status: "approved", token }).eq("code", code)),
+  remove: async (code) => check(await db.from(P).delete().eq("code", code)),
+  purgeExpired: async () => check(await db.from(P).delete().lt("expires_at", new Date().toISOString())),
+};
+
 const mailer: Mailer = {
   async send(to, subject, html) {
     const key = Deno.env.get("RESEND_API_KEY");
@@ -59,9 +74,10 @@ const env = {
   publicUrl: Deno.env.get("PUBLIC_FUNCTION_URL") ?? `${SUPABASE_URL}/functions/v1/lumen-auth`,
   appName: Deno.env.get("APP_NAME") ?? "Lumen",
   notifyUsers: Deno.env.get("NOTIFY_USERS") === "true",
+  pairPageUrl: Deno.env.get("PAIR_PAGE_URL") ?? "https://pasqualepriore94-dotcom.github.io/Lumen/tv.html",
 };
 
 if (env.jwtSecret.length < 32) console.error("JWT_SECRET mancante o troppo corto (almeno 32 caratteri)");
 
-Deno.serve((req) => handle(req, { store, mailer, env }));
+Deno.serve((req) => handle(req, { store, pairs, mailer, env }));
 // redeploy 2026-11-04T20:13:58Z: attiva l'invio email (RESEND_API_KEY)

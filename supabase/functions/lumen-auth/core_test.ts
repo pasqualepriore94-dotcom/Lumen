@@ -1,5 +1,5 @@
 // deno test supabase/functions/lumen-auth/core_test.ts
-import { handle, type Deps, type NewUser, type Store, type UserRow } from "./core.ts";
+import { handle, type Deps, type NewUser, type PairRow, type PairStore, type Store, type UserRow } from "./core.ts";
 
 function assert(cond: unknown, msg: string) { if (!cond) throw new Error(msg); }
 
@@ -20,12 +20,25 @@ function memoryStore(): Store {
   };
 }
 
+function memoryPairs(): PairStore {
+  const rows = new Map<string, PairRow>();
+  return {
+    create: async (row) => { rows.set(row.code, { ...row }); },
+    find: async (code) => rows.get(code) ?? null,
+    approve: async (code, token) => { const r = rows.get(code); if (r) { r.status = "approved"; r.token = token; } },
+    remove: async (code) => { rows.delete(code); },
+    purgeExpired: async () => { for (const [k, r] of rows) if (new Date(r.expires_at).getTime() < Date.now()) rows.delete(k); },
+  };
+}
+
 const sent: { to: string; subject: string; html: string }[] = [];
 const deps: Deps = {
   store: memoryStore(),
+  pairs: memoryPairs(),
   mailer: { send: async (to, subject, html) => { sent.push({ to, subject, html }); } },
   env: { jwtSecret: "x".repeat(40), adminEmail: "pasquale.priore94@gmail.com",
-         publicUrl: "https://demo.supabase.co/functions/v1/lumen-auth", appName: "Lumen", notifyUsers: false },
+         publicUrl: "https://demo.supabase.co/functions/v1/lumen-auth", appName: "Lumen", notifyUsers: false,
+         pairPageUrl: "https://example.github.io/Lumen/tv.html" },
 };
 const BASE = "https://demo.supabase.co/functions/v1/lumen-auth";
 const call = async (path: string, init: RequestInit & { json?: unknown; token?: string } = {}) => {
@@ -153,4 +166,49 @@ Deno.test("blocco dopo tentativi errati e limite per IP", async () => {
     last = r.status;
   }
   assert(last === 429, "limite di tentativi per IP");
+});
+
+Deno.test("accesso dalla TV con il telefono", async () => {
+  const { resetRateLimits } = await import("./core.ts");
+  resetRateLimits();
+  const { hashPassword } = await import("./core.ts");
+  const password = "tv-password-1";
+  await deps.store.insert({ username: "luigi.tv", email: "luigi@example.com", password_hash: await hashPassword(password),
+    role: "user", approved: true, approval_token: null, approved_at: new Date().toISOString() });
+
+  let r = await call("/pair/start", { method: "POST" });
+  assert(r.status === 201 && /^[A-Z2-9]{6}$/.test(r.body.code) && r.body.secret.length > 20, "start " + JSON.stringify(r));
+  assert(r.body.url === `https://example.github.io/Lumen/tv.html?code=${r.body.code}`, "url pagina");
+  const { code, secret } = r.body;
+
+  r = await call("/pair/poll", { json: { code, secret: "sbagliato" } });
+  assert(r.status === 404, "segreto errato");
+  r = await call("/pair/poll", { json: { code, secret } });
+  assert(r.status === 202 && r.body.status === "pending", "in attesa");
+
+  r = await call("/pair/confirm", { json: { code: "ZZZZZZ", username: "luigi.tv", password: "nuova-pass-1" } });
+  assert(r.status === 404, "codice inesistente");
+  r = await call("/pair/confirm", { json: { code: code.toLowerCase(), username: "luigi.tv", password: "sbagliata" } });
+  assert(r.status === 401, "password errata");
+  r = await call("/pair/poll", { json: { code, secret } });
+  assert(r.status === 202, "ancora in attesa dopo errore");
+
+  r = await call("/pair/confirm", { json: { code: ` ${code.slice(0, 3)}-${code.slice(3)} `, username: "Luigi.TV ", password } });
+  assert(r.status === 200 && r.body.status === "approved", "conferma " + JSON.stringify(r));
+
+  r = await call("/pair/poll", { json: { code, secret } });
+  assert(r.status === 200 && r.body.user.username === "luigi.tv" && typeof r.body.token === "string", "token consegnato");
+  const me = await call("/me", { token: r.body.token });
+  assert(me.status === 200, "il token della TV funziona");
+  r = await call("/pair/poll", { json: { code, secret } });
+  assert(r.status === 404, "consegnato una sola volta");
+
+  // un codice scaduto non si può usare
+  r = await call("/pair/start", { method: "POST" });
+  const old = await deps.pairs.find(r.body.code);
+  old!.expires_at = new Date(Date.now() - 1000).toISOString();
+  const c = await call("/pair/confirm", { json: { code: r.body.code, username: "luigi.tv", password } });
+  assert(c.status === 404, "scaduto in conferma");
+  const p = await call("/pair/poll", { json: { code: r.body.code, secret: r.body.secret } });
+  assert(p.status === 410, "scaduto in poll");
 });
