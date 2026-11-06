@@ -34,6 +34,9 @@ export interface PairRow {
   code: string;
   secret_hash: string;
   status: "pending" | "approved";
+  /** login: accesso della TV; playlist: link della playlist inviato dal telefono */
+  purpose?: "login" | "playlist";
+  /** login: token della sessione; playlist: JSON con playlist e guida TV */
   token: string | null;
   expires_at: string;
 }
@@ -57,6 +60,7 @@ export interface Env {
   appName: string;
   notifyUsers: boolean;
   pairPageUrl: string; // pagina web per collegare la TV dal telefono
+  playlistPageUrl: string; // pagina web per inviare alla TV il link della playlist
 }
 
 export interface Deps {
@@ -516,12 +520,17 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     // La TV chiede un codice e un segreto, mostra il QR e poi interroga /pair/poll.
     if (route === "/pair/start" && req.method === "POST") {
       if (rateLimited("pair:" + clientIp(req), 30, 600)) return fail(429, "Troppe richieste: riprova tra qualche minuto.");
+      const b = await readBody(req);
+      const purpose = b.purpose === "playlist" ? "playlist" : "login";
+      // Solo una TV con l'accesso già fatto può ricevere un link di playlist.
+      if (purpose === "playlist" && !(await currentUser(req, deps))) return fail(401, "Accedi prima sulla TV.");
       await deps.pairs.purgeExpired();
       const code = pairCode();
       const secret = randomToken();
       const expires = new Date(Date.now() + PAIR_MINUTES * 60000).toISOString();
-      await deps.pairs.create({ code, secret_hash: await sha256(secret), status: "pending", token: null, expires_at: expires });
-      return json(201, { code, secret, url: `${env.pairPageUrl}?code=${code}`, expiresIn: PAIR_MINUTES * 60 });
+      await deps.pairs.create({ code, secret_hash: await sha256(secret), status: "pending", purpose, token: null, expires_at: expires });
+      const page = purpose === "playlist" ? env.playlistPageUrl : env.pairPageUrl;
+      return json(201, { code, secret, url: `${page}?code=${code}`, expiresIn: PAIR_MINUTES * 60 });
     }
 
     // Conferma dalla pagina aperta sul telefono inquadrando il QR (pagina statica tv.html su GitHub Pages).
@@ -530,7 +539,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
       const b = await readBody(req);
       const code = normalizeCode(b.code);
       const pair = code ? await deps.pairs.find(code) : null;
-      if (!pair || new Date(pair.expires_at).getTime() < Date.now()) {
+      if (!pair || pair.purpose === "playlist" || new Date(pair.expires_at).getTime() < Date.now()) {
         return fail(404, "Codice non valido o scaduto: controlla quello mostrato sulla TV.");
       }
       if (pair.status === "approved") return json(200, { status: "approved" });
@@ -542,6 +551,25 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
       }
       await deps.pairs.approve(code, await issueToken(checked.user, env));
       return json(200, { status: "approved", username: checked.user.username });
+    }
+
+    // Link della playlist (e facoltativamente della guida TV) inviato dal telefono alla TV.
+    if (route === "/pair/send" && req.method === "POST") {
+      if (rateLimited("send:" + clientIp(req), 30, 600)) return fail(429, "Troppi tentativi: riprova tra qualche minuto.");
+      const b = await readBody(req);
+      const code = normalizeCode(b.code);
+      const pair = code ? await deps.pairs.find(code) : null;
+      if (!pair || pair.purpose !== "playlist" || new Date(pair.expires_at).getTime() < Date.now()) {
+        return fail(404, "Codice non valido o scaduto: controlla quello mostrato sulla TV.");
+      }
+      const link = (v: unknown) => String(v ?? "").trim().slice(0, 2000);
+      const playlist = link(b.playlist);
+      const epg = link(b.epg);
+      const valid = (u: string) => /^https?:\/\/\S+$/i.test(u);
+      if (!valid(playlist)) return fail(400, "Inserisci un link della playlist che inizia con http:// o https://.");
+      if (epg && !valid(epg)) return fail(400, "Il link della guida TV deve iniziare con http:// o https://.");
+      await deps.pairs.approve(code, JSON.stringify({ playlist, epg }));
+      return json(200, { status: "approved" });
     }
 
     // La TV controlla se il telefono ha completato l'accesso: il token si consegna una sola volta.
@@ -557,6 +585,10 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
       }
       if (pair.status !== "approved" || !pair.token) return json(202, { status: "pending" });
       await deps.pairs.remove(code);
+      if (pair.purpose === "playlist") {
+        const data = JSON.parse(pair.token);
+        return json(200, { status: "approved", playlist: data.playlist, epg: data.epg ?? "" });
+      }
       const payload = await verifyJWT(pair.token, env.jwtSecret);
       const user = typeof payload?.sub === "string" ? await store.findById(payload.sub) : null;
       if (!user) return fail(410, "Codice scaduto.");

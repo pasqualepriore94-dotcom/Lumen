@@ -43,7 +43,9 @@ const pairs: PairStore = {
   find: async (code) => {
     const { data, error } = await db.from(P).select("*").eq("code", code).maybeSingle();
     if (error) throw new Error(error.message);
-    return (data as PairRow) ?? null;
+    if (!data) return null;
+    const row = data as PairRow;
+    return { ...row, purpose: row.purpose === "playlist" ? "playlist" : "login" };
   },
   approve: async (code, token) => check(await db.from(P).update({ status: "approved", token }).eq("code", code)),
   remove: async (code) => check(await db.from(P).delete().eq("code", code)),
@@ -75,6 +77,7 @@ const env = {
   appName: Deno.env.get("APP_NAME") ?? "Lumen",
   notifyUsers: Deno.env.get("NOTIFY_USERS") === "true",
   pairPageUrl: Deno.env.get("PAIR_PAGE_URL") ?? "https://pasqualepriore94-dotcom.github.io/Lumen/tv.html",
+  playlistPageUrl: Deno.env.get("PLAYLIST_PAGE_URL") ?? "https://pasqualepriore94-dotcom.github.io/Lumen/tv-playlist.html",
 };
 
 if (env.jwtSecret.length < 32) console.error("JWT_SECRET mancante o troppo corto (almeno 32 caratteri)");

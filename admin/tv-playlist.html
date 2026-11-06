@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Playlist per Lumen TV</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: -apple-system, system-ui, sans-serif;
+         background: radial-gradient(circle at 30% 20%, #7c5cff, #140b2e 60%, #000); color: #fff; }
+  .card { width: min(420px, calc(100vw - 32px)); box-sizing: border-box; margin: 16px; padding: 28px; border-radius: 28px;
+          background: rgba(255,255,255,.12); backdrop-filter: blur(24px) saturate(180%); -webkit-backdrop-filter: blur(24px) saturate(180%);
+          border: 1px solid rgba(255,255,255,.25); box-shadow: 0 20px 60px rgba(0,0,0,.4); }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  p { margin: 0 0 18px; opacity: .85; line-height: 1.5; }
+  label { display: block; font-size: 14px; opacity: .9; margin-bottom: 12px; }
+  input { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 12px 14px; border-radius: 14px;
+          border: 1px solid rgba(255,255,255,.3); background: rgba(0,0,0,.25); color: #fff; font-size: 17px; }
+  #code { letter-spacing: .2em; text-transform: uppercase; font-weight: 600; }
+  button { width: 100%; margin-top: 8px; padding: 14px; border: 0; border-radius: 16px; background: #7c5cff; color: #fff;
+           font-size: 17px; font-weight: 600; }
+  button:disabled { opacity: .6; }
+  .msg { min-height: 1.5em; margin: 12px 0 0; color: #ffb3bb; opacity: 1; }
+  .done { text-align: center; }
+  .dot { width: 56px; height: 56px; border-radius: 50%; margin: 0 auto 16px; background: #3ccf8e; display: grid; place-items: center; font-size: 28px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main class="card">
+  <form id="form">
+    <h1>Invia la playlist alla TV</h1>
+    <p>Incolla il link della playlist: comparirà subito su Lumen nella TV.</p>
+    <label>Codice mostrato sulla TV<input id="code" autocomplete="off" autocapitalize="characters" maxlength="12" required></label>
+    <label>Link della playlist (.m3u)<input id="playlist" type="url" inputmode="url" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="https://…" required></label>
+    <label>Guida TV XMLTV (facoltativa)<input id="epg" type="url" inputmode="url" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="https://…/guida.xml.gz"></label>
+    <button id="submit" type="submit">Invia alla TV</button>
+    <p class="msg" id="msg" role="alert"></p>
+  </form>
+  <div class="done" id="done" hidden>
+    <div class="dot">✓</div>
+    <h1>Playlist inviata</h1>
+    <p>Puoi chiudere questa pagina: la TV carica la playlist.</p>
+  </div>
+</main>
+<script>
+  const AUTH = "https://sicpnokpgjqwnhzlznvm.supabase.co/functions/v1/lumen-auth";
+  const $ = (id) => document.getElementById(id);
+  $("code").value = new URLSearchParams(location.search).get("code") || "";
+  ($("code").value ? $("playlist") : $("code")).focus();
+
+  $("form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    $("submit").disabled = true;
+    $("msg").textContent = "";
+    try {
+      const response = await fetch(AUTH + "/pair/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: $("code").value, playlist: $("playlist").value.trim(), epg: $("epg").value.trim() }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || "Invio non riuscito (" + response.status + ").");
+      $("form").hidden = true;
+      $("done").hidden = false;
+    } catch (error) {
+      $("msg").textContent = error.message || "Connessione non riuscita: riprova.";
+      $("submit").disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

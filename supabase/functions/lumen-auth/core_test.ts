@@ -38,7 +38,8 @@ const deps: Deps = {
   mailer: { send: async (to, subject, html) => { sent.push({ to, subject, html }); } },
   env: { jwtSecret: "x".repeat(40), adminEmail: "pasquale.priore94@gmail.com",
          publicUrl: "https://demo.supabase.co/functions/v1/lumen-auth", appName: "Lumen", notifyUsers: false,
-         pairPageUrl: "https://example.github.io/Lumen/tv.html" },
+         pairPageUrl: "https://example.github.io/Lumen/tv.html",
+         playlistPageUrl: "https://example.github.io/Lumen/tv-playlist.html" },
 };
 const BASE = "https://demo.supabase.co/functions/v1/lumen-auth";
 const call = async (path: string, init: RequestInit & { json?: unknown; token?: string } = {}) => {
@@ -211,4 +212,35 @@ Deno.test("accesso dalla TV con il telefono", async () => {
   assert(c.status === 404, "scaduto in conferma");
   const p = await call("/pair/poll", { json: { code: r.body.code, secret: r.body.secret } });
   assert(p.status === 410, "scaduto in poll");
+});
+
+Deno.test("link della playlist inviato dal telefono", async () => {
+  const { resetRateLimits } = await import("./core.ts");
+  resetRateLimits();
+  let r = await call("/pair/start", { json: { purpose: "playlist" } });
+  assert(r.status === 401, "serve una TV con accesso");
+
+  const login = await call("/login", { json: { username: "luigi.tv", password: "tv-password-1" } });
+  assert(login.status === 200, "login di prova");
+  r = await call("/pair/start", { json: { purpose: "playlist" }, token: login.body.token });
+  assert(r.status === 201 && r.body.url === `https://example.github.io/Lumen/tv-playlist.html?code=${r.body.code}`, "start " + JSON.stringify(r));
+  const { code, secret } = r.body;
+
+  r = await call("/pair/confirm", { json: { code, username: "luigi.tv", password: "tv-password-1" } });
+  assert(r.status === 404, "un codice playlist non serve per l'accesso");
+  r = await call("/pair/send", { json: { code, playlist: "javascript:alert(1)" } });
+  assert(r.status === 400, "link non valido");
+  r = await call("/pair/poll", { json: { code, secret } });
+  assert(r.status === 202, "in attesa");
+  r = await call("/pair/send", { json: { code, playlist: " https://iptv.example/lista.m3u?u=a&p=b ", epg: "https://epg.example/guida.xml.gz" } });
+  assert(r.status === 200, "invio " + JSON.stringify(r));
+  r = await call("/pair/poll", { json: { code, secret } });
+  assert(r.status === 200 && r.body.playlist === "https://iptv.example/lista.m3u?u=a&p=b" && r.body.epg === "https://epg.example/guida.xml.gz" && !r.body.token, "consegna " + JSON.stringify(r));
+  r = await call("/pair/poll", { json: { code, secret } });
+  assert(r.status === 404, "consegnato una sola volta");
+
+  // un codice di accesso non accetta link di playlist
+  r = await call("/pair/start", { method: "POST" });
+  const s2 = await call("/pair/send", { json: { code: r.body.code, playlist: "https://x.example/a.m3u" } });
+  assert(s2.status === 404, "codice di accesso rifiutato per la playlist");
 });
