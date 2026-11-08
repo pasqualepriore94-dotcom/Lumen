@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.34.1",
+    "title": "Aggiornamenti",
+    "items": [
+      {
+        "icon": "arrow.down.app.fill",
+        "text": "Se usi una versione vecchia di Lumen, all'apertura compare una finestra «Aggiorna Lumen» con le novità della versione nuova e il tasto «Aggiorna ora» (apre SideStore)."
+      },
+      {
+        "icon": "clock",
+        "text": "«Più tardi» rimanda l'avviso di 24 ore invece di nasconderlo per sempre; il controllo si ripete anche quando torni nell'app."
+      }
+    ]
+  },
+  {
     "version": "0.34.0",
     "title": "Pagine degli attori",
     "items": [

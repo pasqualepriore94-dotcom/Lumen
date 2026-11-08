@@ -195,6 +195,7 @@ struct NotificationsView: View {
 @MainActor
 enum NotificationActions {
     static func actionTitle(_ n: AppNotification, isAdmin: Bool) -> String? {
+        if UpdateChecker.isOffer(n) { return UpdateChecker.shared.available != nil ? "Aggiorna ora" : nil }
         guard isAdmin else { return nil }
         switch n.kind {
         case .newContent where n.playlistId != nil: return "Analizza e importa le novità"
@@ -216,6 +217,8 @@ enum NotificationActions {
             openImport(app)
         case .analysisDone:
             openImport(app)
+        case .update where UpdateChecker.isOffer(n):
+            UpdateChecker.shared.install()
         default:
             break
         }
@@ -285,8 +288,11 @@ struct AnnouncementSheet: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 14)
             }
-            Button { dismiss() } label: {
-                Text("Continua").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 15)
+            Button {
+                if UpdateChecker.isOffer(notification), UpdateChecker.shared.available != nil { UpdateChecker.shared.dismiss() }
+                dismiss()
+            } label: {
+                Text(UpdateChecker.isOffer(notification) && UpdateChecker.shared.available != nil ? "Più tardi" : "Continua").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 15)
             }
             .buttonStyle(GlassButtonStyle(tint: NotificationActions.actionTitle(notification, isAdmin: auth.isAdmin) == nil ? app.accent : nil))
             .foregroundStyle(.white)

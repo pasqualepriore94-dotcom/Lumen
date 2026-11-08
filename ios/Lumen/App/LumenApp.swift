@@ -7,7 +7,7 @@ struct LumenApp: App {
     @State private var app = AppState()
     @State private var library = Library()
     @State private var auth = AuthStore()
-    @State private var updates = UpdateChecker()
+    @State private var updates = UpdateChecker.shared
     @State private var showSplash = true
     @Environment(\.scenePhase) private var scenePhase
 
@@ -40,7 +40,7 @@ struct LumenApp: App {
                         // Dopo un aggiornamento: "Cosa c'è di nuovo" (una volta per versione).
                         Task { @MainActor in
                             try? await Task.sleep(for: .milliseconds(600))
-                            if let n = WhatsNew.pending() { app.announcement = n }
+                            if updates.available == nil, let n = WhatsNew.pending() { app.announcement = n }
                         }
                     }
                         .transition(.opacity)
@@ -187,6 +187,18 @@ struct RootView: View {
         }
         .sheet(item: Binding(get: { app.approvalRequest }, set: { app.approvalRequest = $0 })) { ApprovalSheet(request: $0) }
         .sheet(item: Binding(get: { app.announcement }, set: { app.announcement = $0 })) { AnnouncementSheet(notification: $0) }
+        // Versione vecchia installata: finestra "Aggiorna Lumen" (dopo l'avvio, se non c'è già un'altra finestra aperta)
+        .task(id: updates.promptPending) {
+            guard updates.promptPending else { return }
+            try? await Task.sleep(for: .seconds(2.5))
+            // Aspetta che si chiudano altre finestre (es. "Cosa c'è di nuovo")
+            while !Task.isCancelled, app.announcement != nil || app.detailItem != nil {
+                try? await Task.sleep(for: .seconds(1))
+            }
+            guard updates.promptPending, updates.showBanner, let n = updates.promptNotification() else { return }
+            updates.promptPending = false
+            app.announcement = n
+        }
         .onChange(of: library.activitySignature) { AchievementTracker.shared.check(library) }
         .onChange(of: library.myList.map(\.id)) { WatchlistMonitor.shared.sync(list: library.myList, app: app) }
         .playbackHUD()
