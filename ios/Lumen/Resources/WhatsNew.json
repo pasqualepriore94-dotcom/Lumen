@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.35.0",
+    "title": "Filtro contenuti",
+    "items": [
+      {
+        "icon": "eye.slash.fill",
+        "text": "Lumen nasconde i contenuti per adulti delle playlist, riconosciuti dal gruppo e dal titolo: non vengono importati e quelli già presenti (film, episodi, dirette, contenuti non abbinati) vengono tolti."
+      },
+      {
+        "icon": "switch.2",
+        "text": "Il filtro è attivo di base e si gestisce da Il mio → Impostazioni → Nascondi contenuti per adulti."
+      }
+    ]
+  },
+  {
     "version": "0.34.1",
     "title": "Aggiornamenti",
     "items": [

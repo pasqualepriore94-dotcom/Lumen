@@ -363,6 +363,7 @@ final class LinkLibrary {
         // Corsi e documentari non abbinati: riconosciuti in background, dopo che la Home è comparsa.
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(4))
+            await self?.purgeAdultContent()
             await self?.autoAddCourses()
             await self?.autoAddDocumentaries()
         }

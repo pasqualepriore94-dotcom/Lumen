@@ -188,6 +188,8 @@ struct ProfileView: View {
         .padding(.horizontal, 16)
     }
 
+    @State private var hideAdult = ContentFilter.enabled
+
     private var settings: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: "Impostazioni")
@@ -208,6 +210,25 @@ struct ProfileView: View {
                     row(icon: "app.badge", title: "Icona dell'app", value: nil)
                 }
                 .buttonStyle(.plain)
+                divider
+                Toggle(isOn: Binding(get: { hideAdult }, set: { on in
+                    hideAdult = on
+                    ContentFilter.enabled = on
+                    if on { Task { _ = await LinkLibrary.shared.purgeAdultContent() } }
+                })) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "eye.slash.fill").frame(width: 24).foregroundStyle(app.accent)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Nascondi contenuti per adulti").foregroundStyle(.white)
+                            Text(hideAdult ? "Esclusi dalle playlist in base a gruppo e titolo" : "Per riaverli, reimporta la playlist")
+                                .font(.caption2).foregroundStyle(Theme.secondaryText)
+                        }
+                    }
+                }
+                .tint(app.accent)
+                .font(.subheadline)
+                .padding(.horizontal, 16)
+                .frame(height: 58)
                 divider
                 Button { showPassword = true } label: {
                     row(icon: "key.fill", title: "Cambia password", value: nil)

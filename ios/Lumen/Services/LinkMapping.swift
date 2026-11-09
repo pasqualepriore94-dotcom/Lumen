@@ -140,7 +140,9 @@ final class LinkMapper {
     }
 
     /// Divide i contenuti e cerca nel catalogo ogni titolo diverso una sola volta, con più ricerche in parallelo.
-    func prepare(_ items: [LinkMedia], tmdb: TMDBProvider?) async {
+    func prepare(_ input: [LinkMedia], tmdb: TMDBProvider?) async {
+        // Contenuti per adulti esclusi prima dell'analisi (se il filtro è attivo)
+        let items = ContentFilter.enabled ? await Task.detached(priority: .userInitiated) { ContentFilter.apply(input) }.value : input
         generation += 1
         let gen = generation
         cancelled = false
