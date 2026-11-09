@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.35.1",
+    "title": "Aggiornamenti in LiveContainer",
+    "items": [
+      {
+        "icon": "shippingbox.fill",
+        "text": "Se usi Lumen dentro LiveContainer, «Aggiorna ora» installa la nuova versione direttamente in LiveContainer invece di aprire SideStore."
+      }
+    ]
+  },
+  {
     "version": "0.35.0",
     "title": "Filtro contenuti",
     "items": [

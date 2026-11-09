@@ -101,6 +101,13 @@ final class UpdateChecker {
         return n
     }
 
+    /// Le app installate normalmente stanno in /var/containers/Bundle; dentro LiveContainer l'app gira
+    /// dalla cartella dati di LiveContainer.
+    static var runsInLiveContainer: Bool {
+        let path = Bundle.main.bundlePath
+        return !(path.hasPrefix("/private/var/containers/Bundle/") || path.hasPrefix("/var/containers/Bundle/"))
+    }
+
     /// Notifica che propone l'aggiornamento (non "Cosa c'è di nuovo", che usa lo stesso tipo).
     static func isOffer(_ n: AppNotification) -> Bool { n.kind == .update && n.icon == "arrow.down.app.fill" }
 
@@ -118,8 +125,11 @@ final class UpdateChecker {
         guard let available else { return }
         let encoded = available.ipaURL.absoluteString
             .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=?"))) ?? ""
-        let candidates = ["sidestore://install?url=\(encoded)", "altstore://install?url=\(encoded)"]
-            .compactMap(URL.init(string:))
+        // Dentro LiveContainer l'aggiornamento si installa lì (sostituisce l'app tenendo i dati)
+        let schemes = Self.runsInLiveContainer
+            ? ["livecontainer://install?url=\(encoded)", "sidestore://install?url=\(encoded)"]
+            : ["sidestore://install?url=\(encoded)", "altstore://install?url=\(encoded)", "livecontainer://install?url=\(encoded)"]
+        let candidates = schemes.compactMap(URL.init(string:))
         func attempt(_ index: Int) {
             guard index < candidates.count else {
                 UIApplication.shared.open(available.ipaURL)
