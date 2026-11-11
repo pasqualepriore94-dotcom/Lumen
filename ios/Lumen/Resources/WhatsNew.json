@@ -1,5 +1,23 @@
 [
   {
+    "version": "0.36.0",
+    "title": "Playlist per tutti",
+    "items": [
+      {
+        "icon": "play.square.stack.fill",
+        "text": "Ogni utente può aggiungere le proprie playlist da link o file .m3u: Il mio → I miei contenuti. Lumen le analizza, abbina i titoli al catalogo e li rende riproducibili, come per l'amministratore."
+      },
+      {
+        "icon": "bell.badge",
+        "text": "Anche per gli utenti: controllo delle novità della playlist ogni 6 ore con importazione automatica, contenuti non abbinati, gestione e rimozione dei contenuti caricati."
+      },
+      {
+        "icon": "lock.fill",
+        "text": "Le playlist di ciascuno restano solo sul suo telefono."
+      }
+    ]
+  },
+  {
     "version": "0.35.1",
     "title": "Aggiornamenti in LiveContainer",
     "items": [

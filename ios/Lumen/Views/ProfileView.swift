@@ -41,6 +41,7 @@ struct ProfileView: View {
 
                 watchTimeCard
                 trophiesCard
+                myContentCard
                 if auth.isAdmin { adminCard }
                 settings
 
@@ -164,6 +165,31 @@ struct ProfileView: View {
             .padding(18)
         }
         .buttonStyle(GlassButtonStyle(shape: AnyShape(RoundedRectangle(cornerRadius: 26, style: .continuous))))
+        .padding(.horizontal, 16)
+    }
+
+    /// Playlist dell'utente: disponibile per tutti gli account.
+    private var myContentCard: some View {
+        Button { app.showMyContent = true } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "play.square.stack.fill")
+                    .font(.system(size: 18))
+                    .frame(width: 44, height: 44)
+                    .liquidGlass(in: Circle(), tint: app.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("I miei contenuti").font(.headline)
+                    Text("Aggiungi playlist da link o file .m3u").font(.caption).foregroundStyle(Theme.secondaryText)
+                }
+                Spacer()
+                if ImportJob.shared.isRunning {
+                    Text("\(Int(ImportJob.shared.progress * 100))%").font(.caption.monospacedDigit()).foregroundStyle(Theme.secondaryText)
+                }
+                Image(systemName: "chevron.right").foregroundStyle(Theme.secondaryText)
+            }
+            .foregroundStyle(.white)
+            .padding(14)
+        }
+        .buttonStyle(GlassButtonStyle(shape: AnyShape(RoundedRectangle(cornerRadius: 24, style: .continuous))))
         .padding(.horizontal, 16)
     }
 

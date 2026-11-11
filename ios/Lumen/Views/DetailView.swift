@@ -67,7 +67,7 @@ struct DetailView: View {
                     customMatchCard
                     mainActions
                     suggestionControl
-                    if auth.isAdmin && (movieLink != nil || seriesHasLinks) {
+                    if movieLink != nil || seriesHasLinks {
                         Button(role: .destructive) {
                             withAnimation { links.removeMatch(itemId: current.id) }
                         } label: {
@@ -310,7 +310,7 @@ struct DetailView: View {
     /// Contenuto aggiunto senza scheda: l'amministratore può abbinarlo a una scheda TMDB.
     @ViewBuilder
     private var customMatchCard: some View {
-        if current.id.hasPrefix("link-"), auth.isAdmin {
+        if current.id.hasPrefix("link-") {
             Button { showManualMatch = true } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "link.badge.plus").font(.title3).foregroundStyle(app.accent)

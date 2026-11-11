@@ -70,6 +70,8 @@ final class AppState {
     }
     var detailItem: MediaItem? = nil
     var showAdmin = false
+    /// "I miei contenuti" (playlist dell'utente): aperto anche dalle notifiche di importazione.
+    var showMyContent = false
     var showCatalog = false
     var isPreparingPlayback = false
 

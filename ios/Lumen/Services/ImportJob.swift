@@ -540,7 +540,7 @@ struct ImportJobBanner: View {
     @State private var job = ImportJob.shared
 
     var body: some View {
-        if auth.isAdmin, job.phase == .ready, job.unseen, !app.showAdmin {
+        if job.phase == .ready, job.unseen, !app.showAdmin, !app.showMyContent {
             HStack(spacing: 12) {
                 Image(systemName: "checkmark.seal.fill").font(.system(size: 22)).foregroundStyle(app.accent)
                 VStack(alignment: .leading, spacing: 2) {
@@ -550,7 +550,7 @@ struct ImportJobBanner: View {
                 Spacer(minLength: 4)
                 Button {
                     job.markSeen()
-                    app.showAdmin = true
+                    app.showMyContent = true
                     Task { @MainActor in
                         try? await Task.sleep(for: .milliseconds(450))
                         job.openRequested = true
@@ -569,7 +569,7 @@ struct ImportJobBanner: View {
             .liquidGlassCard(radius: 24)
             .padding(.horizontal, 12)
             .transition(.move(edge: .top).combined(with: .opacity))
-        } else if auth.isAdmin, job.isRunning, !app.showAdmin {
+        } else if job.isRunning, !app.showAdmin, !app.showMyContent {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text(job.phase == .downloading ? "Lettura playlist…" : "Analisi \(Int(job.progress * 100))%")

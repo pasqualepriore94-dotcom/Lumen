@@ -139,10 +139,8 @@ struct LiveChannelsView: View {
                             .contextMenu {
                                 Button("Guarda", systemImage: "play.fill") { Playback.playLink(m, app: app, library: library) }
                                 Button("Guida del canale", systemImage: "list.bullet.rectangle") { guideChannel = m }
-                                if auth.isAdmin {
-                                    Button("Rimuovi dalle dirette", systemImage: "trash", role: .destructive) {
-                                        withAnimation { links.remove(m) }
-                                    }
+                                Button("Rimuovi dalle dirette", systemImage: "trash", role: .destructive) {
+                                    withAnimation { links.remove(m) }
                                 }
                             }
                         }

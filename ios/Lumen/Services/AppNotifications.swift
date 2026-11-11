@@ -163,7 +163,7 @@ struct NotificationsView: View {
                             .font(.caption2).foregroundStyle(.secondary)
                     }
                     Text(n.body).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    if n.kind == .newContent, auth.isAdmin, n.playlistId != nil {
+                    if n.kind == .newContent, n.playlistId != nil {
                         Text("Tocca per analizzare e scegliere cosa importare")
                             .font(.caption2.weight(.semibold)).foregroundStyle(app.accent)
                     }
@@ -196,7 +196,6 @@ struct NotificationsView: View {
 enum NotificationActions {
     static func actionTitle(_ n: AppNotification, isAdmin: Bool) -> String? {
         if UpdateChecker.isOffer(n) { return UpdateChecker.shared.available != nil ? "Aggiorna ora" : nil }
-        guard isAdmin else { return nil }
         switch n.kind {
         case .newContent where n.playlistId != nil: return "Analizza e importa le novità"
         case .analysisDone: return "Scegli cosa importare"
@@ -225,7 +224,7 @@ enum NotificationActions {
     }
 
     private static func openImport(_ app: AppState) {
-        app.showAdmin = true
+        app.showMyContent = true
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(450))
             ImportJob.shared.openRequested = true

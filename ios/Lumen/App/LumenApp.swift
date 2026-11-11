@@ -62,7 +62,7 @@ struct LumenApp: App {
                         await WatchlistMonitor.shared.checkIfNeeded()
                     }
                     // Nuovi contenuti nelle playlist da link → sezione Notifiche (dopo l'avvio, per non rallentarlo).
-                    if auth.isAdmin {
+                    if !PlaylistStore.shared.playlists.isEmpty {
                         Task {
                             try? await Task.sleep(for: .seconds(6))
                             await PlaylistStore.shared.checkForUpdates(app: app)
@@ -151,6 +151,9 @@ struct RootView: View {
         }
         .sheet(isPresented: $app.showAdmin) {
             AdminView()
+        }
+        .sheet(isPresented: $app.showMyContent) {
+            MyContentView()
         }
         .sheet(isPresented: $app.showCatalog) {
             CatalogBrowserView()
