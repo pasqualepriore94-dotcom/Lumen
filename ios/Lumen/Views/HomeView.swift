@@ -45,6 +45,10 @@ struct HomeView: View {
                                 PosterRow(items: library.myList, layout: .poster)
                             }
                         }
+                        // Netflix, Prime Video, Disney+, Apple TV… : il catalogo di ogni piattaforma
+                        if activeFilter != .new {
+                            PlatformsRow(initialKind: activeFilter == .series ? .series : .movie).id("platforms")
+                        }
                         // Categorie su misura create da Apple Intelligence in base ai tuoi gusti
                         ForEach(PersonalRows.shared.rows) { row in
                             let items = row.items.filter(matches)
@@ -97,6 +101,9 @@ struct HomeView: View {
                 .ignoresSafeArea()
         }
         .task(id: app.contentKey) { await load() }
+        .task {
+            await PlatformCatalog.shared.load(tmdb: app.config.providers.first { $0.type == .tmdb && $0.isUsable }.map { TMDBProvider(config: $0) })
+        }
         .task(id: library.activitySignature) {
             // Dopo l'avvio (per non rallentarlo): categorie su misura, rigenerate quando sono vecchie.
             try? await Task.sleep(for: .seconds(12))
@@ -158,6 +165,12 @@ struct HomeView: View {
                             Task { await PersonalRows.shared.refreshIfNeeded(app: app, library: library, force: true) }
                         }
                         .disabled(PersonalRows.shared.generating)
+                    }
+                    if !PlatformCatalog.shared.platforms.isEmpty {
+                        Button("Piattaforme", systemImage: "play.tv") {
+                            if activeFilter != nil { activeFilter = nil }
+                            withAnimation { proxy.scrollTo("platforms", anchor: .top) }
+                        }
                     }
                     if !SuggestionFilter.shared.dismissed.isEmpty {
                         Button("Titoli scartati (\(SuggestionFilter.shared.dismissed.count))", systemImage: "eye.slash") { showDismissed = true }

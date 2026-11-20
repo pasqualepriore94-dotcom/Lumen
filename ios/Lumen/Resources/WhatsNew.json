@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.37.0",
+    "title": "Piattaforme",
+    "items": [
+      {
+        "icon": "play.tv",
+        "text": "Nuova riga «Piattaforme» in Home: Netflix, Prime Video, Disney+, Apple TV, NOW, Paramount+, RaiPlay, Mediaset Infinity e altre. Tocca un logo per il suo catalogo in Italia."
+      },
+      {
+        "icon": "square.grid.3x3",
+        "text": "Per ogni piattaforma: Film o Serie TV, ordinati per popolarità, novità o voto, con scorrimento infinito. La trovi anche in Categorie → Piattaforme."
+      }
+    ]
+  },
+  {
     "version": "0.36.0",
     "title": "Playlist per tutti",
     "items": [
