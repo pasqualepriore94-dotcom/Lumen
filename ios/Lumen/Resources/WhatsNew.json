@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.38.0",
+    "title": "Film e serie insieme",
+    "items": [
+      {
+        "icon": "play.tv",
+        "text": "Toccando una piattaforma (Netflix, Prime Video, Disney+…) vedi subito film e serie TV insieme; con «Film» o «Serie TV» puoi filtrarli."
+      },
+      {
+        "icon": "sparkles",
+        "text": "Le categorie su misura di Apple Intelligence ora propongono anche serie TV: almeno una categoria di sole serie e le altre con film e serie alternati. Vengono rigenerate al primo avvio."
+      }
+    ]
+  },
+  {
     "version": "0.37.2",
     "title": "Già visti",
     "items": [

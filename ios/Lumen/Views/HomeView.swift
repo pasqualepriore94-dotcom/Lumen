@@ -47,7 +47,7 @@ struct HomeView: View {
                         }
                         // Netflix, Prime Video, Disney+, Apple TV… : il catalogo di ogni piattaforma
                         if activeFilter != .new {
-                            PlatformsRow(initialKind: activeFilter == .series ? .series : .movie).id("platforms")
+                            PlatformsRow(initialKind: activeFilter == .series ? .series : (activeFilter == .movies ? .movie : nil)).id("platforms")
                         }
                         // Categorie su misura create da Apple Intelligence in base ai tuoi gusti
                         ForEach(PersonalRows.shared.rows) { row in

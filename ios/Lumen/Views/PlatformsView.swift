@@ -68,7 +68,8 @@ final class PlatformCatalog {
 /// Riga "Piattaforme" della Home: i loghi dei servizi, toccandone uno si apre il suo catalogo.
 struct PlatformsRow: View {
     @Environment(AppState.self) private var app
-    var initialKind: MediaKind = .movie
+    /// nil = film e serie insieme.
+    var initialKind: MediaKind? = nil
     @State private var selected: StreamingPlatform?
     private var catalog: PlatformCatalog { PlatformCatalog.shared }
 
@@ -121,7 +122,8 @@ struct PlatformView: View {
     @Environment(Library.self) private var library
     @Environment(\.dismiss) private var dismiss
     let platform: StreamingPlatform
-    @State var kind: MediaKind
+    /// nil = film e serie insieme (scelta iniziale).
+    @State var kind: MediaKind?
 
     enum Sort: String, CaseIterable, Identifiable {
         case popular = "Popolari", recent = "Novità", rated = "Più votati"
@@ -140,7 +142,7 @@ struct PlatformView: View {
         app.config.providers.first { $0.type == .tmdb && $0.isUsable }.map { TMDBProvider(config: $0) }
     }
 
-    private var source: SectionSource {
+    private func source(_ kind: MediaKind) -> SectionSource {
         var q = ["with_watch_providers": String(platform.id), "watch_region": "IT",
                  "with_watch_monetization_types": "flatrate"]
         let isMovie = kind == .movie
@@ -171,8 +173,9 @@ struct PlatformView: View {
                     }
                     .padding(.horizontal, 16)
                     Picker("Tipo", selection: $kind) {
-                        Text("Film").tag(MediaKind.movie)
-                        Text("Serie TV").tag(MediaKind.series)
+                        Text("Tutto").tag(MediaKind?.none)
+                        Text("Film").tag(MediaKind?.some(.movie))
+                        Text("Serie TV").tag(MediaKind?.some(.series))
                     }
                     .pickerStyle(.segmented)
                     .padding(.horizontal, 16)
@@ -217,7 +220,7 @@ struct PlatformView: View {
             .sheet(item: $selected) { DetailView(item: $0) }
         }
         .preferredColorScheme(.dark)
-        .task(id: "\(kind)-\(sort)") { await reload() }
+        .task(id: "\(String(describing: kind))-\(sort)") { await reload() }
     }
 
     private func reload() async {
@@ -231,11 +234,23 @@ struct PlatformView: View {
         loading = true
         defer { loading = false }
         do {
-            let result = try await tmdb.sectionPage(source, page: page + 1)
+            let next = page + 1
+            var newItems: [MediaItem]
+            if let kind {
+                let result = try await tmdb.sectionPage(source(kind), page: next)
+                newItems = result.items
+                totalPages = result.totalPages
+            } else {
+                // Film e serie insieme: una pagina di ciascuno, alternati
+                async let m = tmdb.sectionPage(source(.movie), page: next)
+                async let t = tmdb.sectionPage(source(.series), page: next)
+                let (movies, series) = try await (m, t)
+                newItems = PersonalRows.mixKinds(movies.items + series.items)
+                totalPages = max(movies.totalPages, series.totalPages)
+            }
             let known = Set(items.map(\.id))
-            items += result.items.filter { !known.contains($0.id) }
-            page = result.page
-            totalPages = result.totalPages
+            items += newItems.filter { !known.contains($0.id) }
+            page = next
         } catch {
             errorMessage = "Non riesco a caricare il catalogo. Riprova."
         }

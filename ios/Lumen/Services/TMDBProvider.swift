@@ -512,6 +512,29 @@ struct TMDBProvider: ContentProvider {
         return out
     }
 
+    /// Serie TV popolari con generi simili (i generi dei film vengono tradotti in quelli delle serie:
+    /// es. Azione → Action & Adventure, Fantascienza → Sci-Fi & Fantasy).
+    func popularSeries(likeGenres names: Set<String>) async -> [MediaItem] {
+        guard let json = try? await get("/genre/tv/list") else { return [] }
+        let tv = (json["genres"] as? [[String: Any]] ?? []).compactMap { g -> (Int, String)? in
+            guard let id = g["id"] as? Int, let n = g["name"] as? String else { return nil }
+            return (id, n.lowercased())
+        }
+        let alias: [String: [String]] = [
+            "azione": ["action"], "avventura": ["action", "adventure"], "fantascienza": ["sci-fi"],
+            "fantasy": ["fantasy"], "thriller": ["mistero", "crime"], "horror": ["mistero"],
+            "guerra": ["war"], "romance": ["dramma", "soap"], "storia": ["war", "documentario"]
+        ]
+        var ids = Set<Int>()
+        for name in names.map({ $0.lowercased() }) {
+            for (id, n) in tv where n == name || n.contains(name) || (alias[name] ?? []).contains(where: n.contains) { ids.insert(id) }
+        }
+        guard !ids.isEmpty else { return [] }
+        let source = SectionSource(path: "/discover/tv", query: ["with_genres": ids.map(String.init).joined(separator: "|"),
+                                                                 "sort_by": "popularity.desc", "vote_count.gte": "150"], kind: .series)
+        return (try? await sectionPage(source, page: 1).items) ?? []
+    }
+
     private func genreMap() async throws -> [Int: String] {
         if let cached = await TMDBCache.shared.genres(for: language) { return cached }
         async let movies = get("/genre/movie/list")

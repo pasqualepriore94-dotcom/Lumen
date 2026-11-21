@@ -250,7 +250,8 @@ final class PersonalRows {
         if let data = try? Data(contentsOf: file), let s = try? JSONDecoder().decode(Saved.self, from: data) {
             storedRows = s.rows
             // Le righe salvate con la versione precedente (8 titoli) vengono rigenerate più lunghe.
-            savedDate = s.rows.contains { $0.items.count > 12 } ? s.date : nil
+            // Righe vecchie (corte o di soli film) vengono rigenerate con film e serie
+            savedDate = s.rows.contains { $0.items.count > 12 } && s.rows.contains { $0.items.contains(where: \.isSeries) } ? s.date : nil
             savedSignature = s.signature
         }
     }
@@ -297,6 +298,7 @@ final class PersonalRows {
         Crea 3 categorie su misura per la home dell'utente, basate sui suoi gusti, con nomi originali e specifici
         (esempi: "Thriller psicologici per te", "Serie brevi da finire in un weekend", "Commedie per staccare la testa").
         Ogni categoria ha 10 film o serie TV reali ed esistenti, coerenti con il nome, che l'utente non ha ancora visto.
+        Proponi sia film sia serie TV: almeno una categoria è di sole serie TV e nelle altre alterna film e serie.
         Preferisci i titoli già disponibili in Lumen quando sono adatti. Non inventare titoli.
         """)
         let prompt = """
@@ -354,8 +356,14 @@ final class PersonalRows {
                     .sorted { $0.1 > $1.1 }
                 fromPlaylist = scored.prefix(15).map(\.0)
             }
+            // Serie TV dello stesso genere, se tra le proposte ce ne sono poche
+            var seriesExtra: [MediaItem] = []
+            if let tmdb, (seeds + recs).filter(\.isSeries).count < 10 {
+                seriesExtra = await tmdb.popularSeries(likeGenres: rowGenres)
+                    .sorted { (taste.compatibility($0) ?? 50) > (taste.compatibility($1) ?? 50) }
+            }
             let filter = SuggestionFilter.shared
-            let items = (seeds + fromPlaylist + recs)
+            let items = Self.mixKinds(seeds + fromPlaylist + recs + seriesExtra)
                 .filter { !seenIds.contains($0.id) && !filter.isDismissed($0.id) && used.insert($0.id).inserted }
                 .prefix(40)
             // Prima quelli che si possono guardare subito
@@ -371,6 +379,17 @@ final class PersonalRows {
         #else
         return nil
         #endif
+    }
+
+    /// Alterna film e serie mantenendo l'ordine di ciascun gruppo.
+    nonisolated static func mixKinds(_ list: [MediaItem]) -> [MediaItem] {
+        let movies = list.filter { !$0.isSeries }, series = list.filter(\.isSeries)
+        var out: [MediaItem] = []
+        for i in 0..<max(movies.count, series.count) {
+            if i < movies.count { out.append(movies[i]) }
+            if i < series.count { out.append(series[i]) }
+        }
+        return out
     }
 
     nonisolated private static func norm(_ s: String) -> String {
