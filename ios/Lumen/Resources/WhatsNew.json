@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.37.1",
+    "title": "Schede più fluide",
+    "items": [
+      {
+        "icon": "rectangle.stack",
+        "text": "Aprire un film dalla scheda di un altro (saga, attore) non va più a scatti: il trailer della scheda sotto si ferma e si toglie, quello nuovo parte solo a scheda aperta e lo sfondo sfocato è molto più leggero."
+      }
+    ]
+  },
+  {
     "version": "0.37.0",
     "title": "Piattaforme",
     "items": [

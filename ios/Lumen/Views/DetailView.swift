@@ -33,6 +33,12 @@ struct DetailView: View {
     @State private var translating = false
 
     private var current: MediaItem { detail?.item ?? item }
+
+    /// Il trailer parte solo a scheda aperta del tutto (prima il video si avviava durante l'animazione di apertura: scatti).
+    @State private var trailerReady = false
+    /// Un'altra scheda (saga, attore, film collegato) è aperta sopra: il trailer di questa si toglie,
+    /// così non restano video in riproduzione sotto le schede successive.
+    private var isCovered: Bool { sagaItem != nil || castPerson != nil || watchSummary != nil || showManualMatch }
     private var canStream: Bool { app.provider.capabilities.streams }
     private var links: LinkLibrary { LinkLibrary.shared }
     /// Video da link abbinato a questo film.
@@ -108,8 +114,10 @@ struct DetailView: View {
         .background {
             ZStack {
                 Color.black
-                RemoteImage(url: current.bestWideImage)
-                    .blur(radius: 60)
+                // Sfondo sfocato da un'immagine piccolissima ingrandita: stesso effetto, molto meno lavoro
+                // rispetto a sfocare un'immagine grande (pesava a ogni scheda aperta una sopra l'altra).
+                RemoteImage(url: current.bestWideImage, maxPixel: 48)
+                    .blur(radius: 14)
                     .opacity(0.45)
                 LinearGradient(colors: [.clear, .black.opacity(0.9)], startPoint: .top, endPoint: .bottom)
             }
@@ -144,7 +152,17 @@ struct DetailView: View {
             TrailerPlayerView(title: current.title, url: t.url)
         }
         .task(id: app.contentKey) { await load() }
-        .task(id: (detail?.item.id ?? "") + "|\(library.activitySignature)") { await loadAIExtras() }
+        .task {
+            try? await Task.sleep(for: .milliseconds(650))
+            trailerReady = true
+        }
+        // Tolto il trailer, torna visibile la locandina (altrimenti la testata resterebbe nera al ritorno)
+        .onChange(of: isCovered) { if isCovered { previewPlaying = false } }
+        .task(id: (detail?.item.id ?? "") + "|\(library.activitySignature)") {
+            // Spiegazioni e traduzioni dopo l'apertura, per non appesantire l'animazione
+            try? await Task.sleep(for: .milliseconds(500))
+            await loadAIExtras()
+        }
     }
 
     private func close() {
@@ -167,7 +185,7 @@ struct DetailView: View {
                 .animation(.easeInOut(duration: 0.6), value: previewPlaying))
             .background(Color.black)
             .overlay {
-                if let id = previewId {
+                if let id = previewId, trailerReady, !isCovered {
                     TrailerPreview(videoId: id, muted: previewMuted, paused: previewPaused || trailer != nil || previewStopped,
                                    controls: false, autoplay: true, cover: true, playing: $previewPlaying)
                         .opacity(previewPlaying ? 1 : 0)

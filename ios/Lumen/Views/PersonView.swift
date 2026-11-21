@@ -41,7 +41,7 @@ struct PersonView: View {
         .background {
             ZStack {
                 Color.black
-                RemoteImage(url: person?.photo ?? member.photo, maxPixel: 600).blur(radius: 60).opacity(0.4)
+                RemoteImage(url: person?.photo ?? member.photo, maxPixel: 48).blur(radius: 14).opacity(0.4)
                 LinearGradient(colors: [.clear, .black.opacity(0.92)], startPoint: .top, endPoint: .bottom)
             }
             .ignoresSafeArea()
