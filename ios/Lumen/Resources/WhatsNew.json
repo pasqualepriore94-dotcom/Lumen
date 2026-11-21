@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.37.2",
+    "title": "Già visti",
+    "items": [
+      {
+        "icon": "checkmark.circle.fill",
+        "text": "Sulle locandine dei film e delle serie che hai visto compare una spunta verde; le serie iniziate hanno un occhio. Vale in Home, ricerca, «Mostra tutto», piattaforme e catalogo."
+      }
+    ]
+  },
+  {
     "version": "0.37.1",
     "title": "Schede più fluide",
     "items": [

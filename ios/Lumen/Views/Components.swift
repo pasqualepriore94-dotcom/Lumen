@@ -212,10 +212,46 @@ struct PosterCard: View {
         .overlay(alignment: .topLeading) {
             if let match = library.taste.compatibility(item) { MatchBadge(percent: match, compact: true).padding(5) }
         }
+        .watchedMark(item)
         .frame(width: width, height: width / aspect)
         .contentShape(Rectangle())
         .accessibilityLabel(item.title)
     }
+}
+
+/// Segno "Visto" sulle locandine: spunta verde per film e serie visti, occhio per le serie iniziate.
+struct WatchedMark: ViewModifier {
+    @Environment(Library.self) private var library
+    let item: MediaItem
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .bottomTrailing) {
+            if let state = state {
+                Image(systemName: state == .done ? "checkmark" : "eye.fill")
+                    .font(.system(size: 9, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .frame(width: 20, height: 20)
+                    .background(Circle().fill(state == .done ? Color.green : Color.black.opacity(0.6)))
+                    .overlay(Circle().stroke(.white.opacity(0.85), lineWidth: 1))
+                    .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
+                    .padding(5)
+                    .accessibilityLabel(state == .done ? "Visto" : "Iniziato")
+            }
+        }
+    }
+
+    private enum State { case done, started }
+
+    private var state: State? {
+        if library.isWatched(item.id) { return .done }
+        guard item.isSeries, let s = library.seriesWatch[item.id], !s.episodes.isEmpty else { return nil }
+        return s.totalEpisodes > 0 && s.episodes.count >= s.totalEpisodes ? .done : .started
+    }
+}
+
+extension View {
+    /// Aggiunge il segno "Visto" / "Iniziato" a una locandina.
+    func watchedMark(_ item: MediaItem) -> some View { modifier(WatchedMark(item: item)) }
 }
 
 // MARK: - Sezione orizzontale

@@ -68,6 +68,7 @@ struct SectionGridView: View {
         return Color.clear
             .aspectRatio(2.0 / 3.0, contentMode: .fit)
             .overlay(RemoteImage(url: item.bestPosterImage, maxPixel: ImagePipeline.posterPixels))
+                .watchedMark(item)
             .overlay(alignment: .bottomLeading) {
                 if item.bestPosterImage == nil {
                     Text(item.title).font(.caption.bold()).padding(6)

@@ -220,6 +220,7 @@ struct SearchView: View {
                             Color.clear
                                 .aspectRatio(2.0 / 3.0, contentMode: .fit)
                                 .overlay(RemoteImage(url: item.bestPosterImage, maxPixel: ImagePipeline.posterPixels))
+                .watchedMark(item)
                                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                                 .accessibilityLabel(item.title)
                         }
